@@ -96,6 +96,16 @@ window.__ModuleLoader__.load({
       var actionError = errorState[0];
       var setActionError = errorState[1];
 
+      var setMode = function (mode) {
+        if (!props.rpcCall) return;
+        setBusy(true); setActionError(null);
+        Promise.resolve(props.rpcCall("mode.set", { mode: mode })).then(unwrapRpc).then(function (st) {
+          setStatus(st || null); setBusy(false);
+          // 切了模式，二维码必须重新生成（Cloudflare 的地址每次都变）
+          generatePair();
+        }).catch(function (e) { setBusy(false); setActionError(String((e && e.message) || e)); });
+      };
+
       var refreshStatus = function () {
         if (!props.rpcCall) { setLoading(false); return; }
         Promise.resolve(props.rpcCall("tailscale.status", {})).then(unwrapRpc).then(function (s) {
@@ -150,7 +160,46 @@ window.__ModuleLoader__.load({
         }).catch(function (e) { setBusy(false); setActionError(String((e && e.message) || e)); });
       };
 
+      var modes = (status && status.modes) || [
+        { id: "cloudflare", label: "Cloudflare" },
+        { id: "tailscale", label: "Tailscale" },
+        { id: "easytier", label: "EasyTier" }
+      ];
+      var activeMode = (status && status.mode) || "cloudflare";
+      var modeHint = activeMode === "cloudflare"
+        ? makeT(currentLang())("手机不用装任何东西，扫码直接连。适合局域网/临时使用。首次会自动下载约 20MB 的 cloudflared。", "Nothing to install on the phone — just scan. Best for LAN or temporary use. First run auto-downloads cloudflared (~20MB).")
+        : activeMode === "easytier"
+          ? makeT(currentLang())("需要在 App Store（海外区）安装 EasyTier，约 $0.99，且要自己配网络名和密钥。适合会自建的技术用户。", "Requires EasyTier from an overseas App Store (~$0.99) plus your own network name and secret. For users who self-host.")
+          : makeT(currentLang())("手机和电脑都要装 Tailscale 并登录同一个账号，免费。适合长期、多设备使用。", "Install Tailscale on both phone and computer with the same account — free. Best for long-term, multi-device use.");
+
       return React.createElement("div", { style: { padding: 14, borderRadius: 12, border: "1px solid rgba(0,0,0,.08)" } },
+        // 三种方式的差异说明（放在圆点上方，让用户先知道门槛再选）
+        React.createElement("div", { style: { fontSize: 11, opacity: 0.65, lineHeight: 1.6, marginBottom: 8 } },
+          React.createElement("div", null,
+            React.createElement("b", null, "Cloudflare"),
+            makeT(currentLang())("　手机零安装，扫码即连（推荐）", "　Phone installs nothing; scan to connect (recommended)")),
+          React.createElement("div", null,
+            React.createElement("b", null, "Tailscale"),
+            makeT(currentLang())("　两端都要装并登录同一账号，免费，长期更稳", "　Install on both devices, same account, free, most stable long-term")),
+          React.createElement("div", null,
+            React.createElement("b", null, "EasyTier"),
+            makeT(currentLang())("　需海外 App Store 装 App（约 $0.99）+ 自行配置", "　Overseas App Store app (~$0.99) + manual config"))),
+        // 连接方式三选一（小圆点），二维码始终对应当前选中的方式
+        React.createElement("div", { style: { display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: 6 } },
+          modes.map(function (m) {
+            var selected = m.id === activeMode;
+            return React.createElement("label", {
+              key: m.id,
+              style: { display: "flex", alignItems: "center", gap: 6, cursor: busy ? "default" : "pointer", fontSize: 13, opacity: busy ? 0.5 : 1 }
+            },
+              React.createElement("input", {
+                type: "radio", name: "pocket-conn-mode", checked: selected, disabled: busy,
+                onChange: function () { if (!selected) setMode(m.id); },
+                style: { accentColor: "#147A5E", margin: 0 }
+              }),
+              React.createElement("span", { style: { fontWeight: selected ? 600 : 400 } }, m.label));
+          })),
+        React.createElement("div", { style: { fontSize: 11, opacity: 0.6, marginBottom: 10, lineHeight: 1.5 } }, modeHint),
         React.createElement("div", { style: { fontWeight: 600, fontSize: 14, marginBottom: 4 } }, makeT(currentLang())("扫码连接（推荐，免密码）", "Scan to connect (recommended, no PIN)")),
         React.createElement("div", { style: { fontSize: 12, opacity: 0.65, lineHeight: 1.5, marginBottom: 10 } },
           makeT(currentLang())("用 DSH Pocket 扫描下方二维码即可直接连接，无需输入密码。二维码自动轮换，每次有效 60 秒、仅可使用一次。", "Scan the QR below with DSH Pocket to connect directly — no PIN. The code rotates automatically and each one is valid for 60 seconds, single use.")),
@@ -164,8 +213,8 @@ window.__ModuleLoader__.load({
             React.createElement("div", { style: { fontSize: 20, fontWeight: 600, color: "#147A5E", marginBottom: 10 } }, remaining + "s"),
             React.createElement("div", { style: { fontSize: 11, opacity: 0.55, marginBottom: 2 } }, makeT(currentLang())("固定地址", "Fixed address")),
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 } },
-              React.createElement("div", { style: { fontSize: 12.5, wordBreak: "break-all", flex: "1 1 170px", minWidth: 0 } }, status && status.httpsUrl ? status.httpsUrl : (loading ? makeT(currentLang())("检测中…", "Checking…") : makeT(currentLang())("未检测到 Tailscale 地址", "No Tailscale address detected"))),
-              React.createElement("button", { type: "button", onClick: function () { copy(status && status.httpsUrl, "url"); }, style: chipStyle }, copied === "url" ? makeT(currentLang())("已复制", "Copied") : makeT(currentLang())("复制", "Copy"))),
+              React.createElement("div", { style: { fontSize: 12.5, wordBreak: "break-all", flex: "1 1 170px", minWidth: 0 } }, ((status && (status.address || status.httpsUrl)) || (loading ? makeT(currentLang())("检测中…", "Checking…") : makeT(currentLang())("当前方式还没有地址", "No address for this mode yet")))),
+              React.createElement("button", { type: "button", onClick: function () { copy(status && (status.address || status.httpsUrl), "url"); }, style: chipStyle }, copied === "url" ? makeT(currentLang())("已复制", "Copied") : makeT(currentLang())("复制", "Copy"))),
             React.createElement("div", { style: { fontSize: 11, opacity: 0.55, marginBottom: 4 } }, makeT(currentLang())("访问密码（手动登录用）", "Access PIN (manual login)")),
             React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" } },
               React.createElement("code", { style: { fontSize: 13, letterSpacing: 0.5, minWidth: 68 } }, showPin ? ((status && status.pin) || "—") : mask),
@@ -182,6 +231,7 @@ window.__ModuleLoader__.load({
               React.createElement("button", { type: "button", disabled: busy, onClick: function () { savePin(customPin); }, style: chipPrimary }, makeT(currentLang())("保存", "Save")),
               React.createElement("span", { style: { fontSize: 11, opacity: 0.55 } }, makeT(currentLang())("保存后旧密码失效", "Old PIN stops working after saving"))) : null,
             actionError ? React.createElement("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 6 } }, actionError) : null,
+            (status && status.error) ? React.createElement("div", { style: { fontSize: 11, color: "#b45309", marginTop: 6, lineHeight: 1.5 } }, status.error) : null,
             pairValue.error ? React.createElement("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 6 } }, pairValue.error) : null,
             React.createElement("div", { style: { fontSize: 11, opacity: 0.55, lineHeight: 1.5, marginTop: 10 } },
               makeT(currentLang())("扫配对码无需密码，最省事；手动登录时用上面的访问密码。密码只保存在本机，请勿截图分享。", "Scanning the pairing QR needs no PIN and is easiest; use the access PIN above for manual login. The PIN stays on this machine — don't share screenshots.")))));
@@ -197,7 +247,7 @@ window.__ModuleLoader__.load({
           React.createElement("div", { style: { flex: "1 1 240px", minWidth: 0 } },
             React.createElement("div", { style: { fontWeight: 600, fontSize: 15, marginBottom: 4 } }, makeT(currentLang())("在 iPhone 上使用 DSH", "Use DSH on iPhone")),
             React.createElement("div", { style: { fontSize: 12, opacity: 0.68, lineHeight: 1.55, marginBottom: 10 } },
-              makeT(currentLang())("扫码从 App Store 安装 DSH Pocket iOS；装好后用上方二维码连接（或 dsh-pocket 的局域网/公网二维码）。", "Scan to install DSH Pocket iOS from the App Store, then connect with the QR above (or dsh-pocket's LAN/public QR).")),
+              makeT(currentLang())("扫码从 App Store 安装 DSH Pocket iOS；装好后用上方二维码连接。", "Scan to install DSH Pocket iOS from the App Store, then connect with the QR above.")),
             React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
               React.createElement("a", { href: APP_STORE_URL, target: "_blank", rel: "noreferrer", style: chipPrimary }, makeT(currentLang())("在 App Store 下载", "Download on the App Store")),
               React.createElement("a", { href: REPO_URL, target: "_blank", rel: "noreferrer", style: chipStyle }, makeT(currentLang())("GitHub 仓库", "GitHub repo"))))));

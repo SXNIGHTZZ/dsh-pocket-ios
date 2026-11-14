@@ -12,6 +12,7 @@ import { execFile } from 'node:child_process'
 import { createServer, request as httpRequest } from 'node:http'
 import { promisify } from 'node:util'
 import QRCode from 'qrcode'
+import { CloudflareTunnel, findCloudflared } from './cloudflare.js'
 
 const execFileP = promisify(execFile)
 
@@ -130,6 +131,117 @@ async function readConfiguredUrl() {
 }
 
 /** 供 RPC 与单测使用：返回 Tailscale 连接信息与带访问密码的二维码。 */
+/** 三种连接方式。默认 Tailscale。 */
+// 顺序即门槛从低到高：Cloudflare（手机零安装）→ Tailscale（需账号）→ EasyTier（需海外 App + 付费）
+const MODES = ['cloudflare', 'tailscale', 'easytier']
+const MODE_LABELS = {
+  tailscale: 'Tailscale',
+  cloudflare: 'Cloudflare',
+  easytier: 'EasyTier',
+}
+
+/** 当前选中的模式（进程内）。持久化见 readMode/saveMode。 */
+let currentMode = 'cloudflare'
+/** Cloudflare quick 隧道（懒创建；同一时刻只跑一个）。 */
+let cloudflareTunnel = null
+/** dsh web 的监听端口，apply() 里赋值；modeStatus 用它起隧道。 */
+let dshWebPortRef = null
+
+function modeFile() {
+  return join(LOG_DIR, 'mode.json')
+}
+
+async function readMode() {
+  try {
+    const raw = await readFile(modeFile(), 'utf8')
+    const value = JSON.parse(raw)?.mode
+    if (MODES.includes(value)) return value
+  } catch { /* 没存过 */ }
+  // 默认 Cloudflare：手机端零安装，是唯一"扫码即连、什么都不用装"的方式
+  return 'cloudflare'
+}
+
+async function saveMode(mode) {
+  try {
+    await mkdir(LOG_DIR, { recursive: true })
+    await writeFile(modeFile(), JSON.stringify({ mode }), 'utf8')
+  } catch { /* 存不了不影响本次使用 */ }
+}
+
+/** Cloudflare 隧道实例（端口取自 dsh web 的监听端口）。 */
+function cloudflareFor(port) {
+  if (!cloudflareTunnel || cloudflareTunnel.port !== port) {
+    cloudflareTunnel = new CloudflareTunnel({ port, log: (line) => void logLine(line) })
+  }
+  return cloudflareTunnel
+}
+
+/**
+ * 当前连接方式的统一状态视图（面板和 pair.create 共用）。
+ *
+ * 三种方式对外的形状一致：address / qr / state / error，面板只需要渲染一套 UI。
+ * - tailscale: 固定域名（需先装 Tailscale 并登录）
+ * - cloudflare: quick 隧道（每次启动地址都会变，所以实时生成）
+ * - easytier: 暂未实现，返回 not-supported，面板据此显示「即将支持」
+ *
+ * @returns {Promise<{mode: string, label: string, address: string|null, qr: string|null,
+ *   state: string, error: string|null, modes: {id: string, label: string}[]}>}
+ */
+async function modeStatus() {
+  currentMode = await readMode()
+  const modes = MODES.map((id) => ({ id, label: MODE_LABELS[id] }))
+  const base = { mode: currentMode, label: MODE_LABELS[currentMode], modes }
+
+  if (currentMode === 'cloudflare') {
+    const port = dshWebPortRef
+    if (!port) {
+      return { ...base, address: null, qr: null, state: 'error', error: '拿不到 dsh web 端口' }
+    }
+    const tunnel = cloudflareFor(port)
+    try {
+      // 已就绪就复用；否则启动（首次会自动下载 cloudflared）
+      const url = tunnel.status().state === 'ready' && tunnel.status().url
+        ? tunnel.status().url
+        : await tunnel.start()
+      const qr = await QRCode.toDataURL(url, { margin: 1, width: 360 })
+      return { ...base, address: url, qr, state: 'ready', error: null, phase: null }
+    } catch (error) {
+      const snap = tunnel.status()
+      return {
+        ...base,
+        address: null,
+        qr: null,
+        state: 'error',
+        // 区分「下载失败」和「隧道启动失败」：前者要教用户手动装，后者多半是网络
+        error: snap.phase === 'downloading' || snap.phase === 'retrying'
+          ? `cloudflared 下载/安装失败：${snap.error ?? error?.message ?? error}`
+          : String(error?.message ?? error),
+        phase: snap.phase ?? null,
+      }
+    }
+  }
+
+  if (currentMode === 'easytier') {
+    return {
+      ...base,
+      address: null,
+      qr: null,
+      state: 'not-supported',
+      error: 'EasyTier 还没接入；先用 Cloudflare（仅局域网可用，无需额外客户端）',
+    }
+  }
+
+  // tailscale（默认）
+  const ts = await tailscaleStatus()
+  return {
+    ...base,
+    address: ts.httpsUrl ?? null,
+    qr: ts.qr ?? null,
+    state: ts.httpsUrl ? 'ready' : 'error',
+    error: ts.httpsUrl ? null : 'Tailscale 未就绪：请确认已安装并登录 Tailscale',
+  }
+}
+
 export async function tailscaleStatus() {
   let dnsName = null
   let httpsUrl = null
@@ -208,6 +320,7 @@ function send(res, status, payload) {
  */
 function attachStableProxy(ctx, handler) {
   const dshPort = ctx.webServer?.port
+  dshWebPortRef = dshPort ?? null
   if (!dshPort) {
     ctx?.logger?.warn?.('dsh-pocket-ios: 拿不到 DSH web 端口，稳定入口未启动')
     return () => {}
@@ -469,15 +582,40 @@ export function apply(ctx) {
           send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value: { devices: value } } })
           return
         }
+        // 切换连接方式：停掉旧隧道、启动新隧道，返回新状态。
+        if (endpoint === 'mode.set') {
+          const args = body?.payload?.args ?? body?.payload ?? body?.args ?? body ?? {}
+          const next = String(args.mode ?? '')
+          if (!MODES.includes(next)) {
+            send(res, 200, { type: 'server-response', rpcId, result: { ok: false, error: { code: 'bad-request', message: `unknown mode ${next}` } } })
+            return
+          }
+          // 互斥：切走之前先把上一种停掉，避免两个隧道进程同时跑
+          if (currentMode === 'cloudflare' && next !== 'cloudflare' && cloudflareTunnel) {
+            await cloudflareTunnel.stop()
+          }
+          currentMode = next
+          await saveMode(next)
+          await logLine(`mode -> ${next}`)
+          const value = await modeStatus()
+          send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value } })
+          return
+        }
+        if (endpoint === 'mode.status') {
+          const value = await modeStatus()
+          send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value } })
+          return
+        }
         if (endpoint === 'pair.create') {
           const pairToken = Array.from({ length: 32 }, () => {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
             return chars[Math.floor(Math.random() * chars.length)]
           }).join('')
           pairTokens.set(pairToken, { expiresAt: Date.now() + 60_000 })
-          // 优先用 Tailscale 固定地址；否则回退请求 Host。
-          const status = await tailscaleStatus()
-          let base = status.httpsUrl
+          // 按当前连接方式取地址：Cloudflare 用 quick 隧道，Tailscale 用固定地址，
+          // 都没有时回退到请求 Host（局域网直连）。
+          const status = await modeStatus()
+          let base = status.address
           if (!base) {
             const host = String(req.headers.host ?? '')
             const forwardedProto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim()
@@ -515,7 +653,9 @@ export function apply(ctx) {
           send(res, 200, { type: 'server-response', rpcId, result: { ok: false, error: { code: 'bad-request', message: `unknown endpoint ${endpoint}` } } })
           return
         }
-        const value = await tailscaleStatus()
+        // 面板只认这一个端点：返回统一形状（含 mode/modes/address/qr/state）。
+        // 兼容旧字段：httpsUrl/pin 仍在 tailscaleStatus 里，需要的话单独取。
+        const value = await modeStatus()
         send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value } })
       } catch (error) {
         send(res, 200, { type: 'server-response', rpcId: '', result: { ok: false, error: { code: 'bad-request', message: String(error?.message ?? error) } } })
