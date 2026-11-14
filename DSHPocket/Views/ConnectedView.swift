@@ -22,7 +22,6 @@ struct ConnectedView: View {
     @State private var showingDisconnectConfirm = false
     @AppStorage("dsh-pocket.collapsed-groups") private var collapsedGroupsRaw = ""
     @State private var renamingSession: PocketSession?
-    @State private var renameDraft = ""
     @State private var didAutoOpen = false
     @State private var searchText = ""
     @State private var showsWorkspacePicker = false
@@ -271,8 +270,12 @@ struct ConnectedView: View {
                               systemImage: model.sessionStore.pinnedSessionIds.contains(session.sessionId) ? "pin.slash" : "pin")
                     }
                     Button {
-                        renamingSession = session
-                        renameDraft = session.displayTitle
+                        // 等 contextMenu 收起再弹 sheet，避免转场叠加。
+                        let target = session
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(300))
+                            renamingSession = target
+                        }
                     } label: {
                         Label(L10n.t("重命名"), systemImage: "pencil")
                     }
@@ -372,18 +375,15 @@ struct ConnectedView: View {
             )
         }
         .navigationTitle(L10n.t("会话"))
-        .alert(L10n.t("重命名会话"), isPresented: Binding(
-            get: { renamingSession != nil },
-            set: { if !$0 { renamingSession = nil } }
-        ), presenting: renamingSession) { session in
-            TextField(L10n.t("会话名称"), text: $renameDraft)
-            Button(L10n.t("保存")) {
-                Task { await model.rename(session, to: renameDraft) }
-                renamingSession = nil
-            }
-            Button(L10n.t("取消"), role: .cancel) { renamingSession = nil }
-        } message: { _ in
-            Text(L10n.t("会同步到电脑端的会话标题。"))
+        .sheet(item: $renamingSession) { session in
+            RenameSessionSheet(
+                originalTitle: session.displayTitle,
+                onSave: { newTitle in
+                    renamingSession = nil
+                    Task { await model.rename(session, to: newTitle) }
+                },
+                onCancel: { renamingSession = nil }
+            )
         }
         .alert(L10n.t("断开与电脑的连接？"), isPresented: $showingDisconnectConfirm) {
             Button(L10n.t("断开连接"), role: .destructive) { model.disconnect() }
