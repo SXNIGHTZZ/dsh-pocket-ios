@@ -24,6 +24,19 @@ extension ConnectionModel {
     @MainActor
     /// 进入会话：只切状态、让界面立刻有内容；订阅与维护工作交给 startBackgroundFeeds。
     func open(_ session: PocketSession) {
+        // 进入任何会话（包括退出后重进同一个）都先把「上一个活跃会话」的旧历史卸载。
+        //
+        // 为什么放在这里而不是 ConversationView.onDisappear：
+        // NavigationStack 返回时视图的 onDisappear 实测不触发，`leave()` 也就不会跑——
+        // 结果是内存看着降了（视图销毁），messages 数组其实还留着，重进又全量回来。
+        // `open()` 是进入会话的唯一必经之路，必定执行。
+        if let previous = activeConversation {
+            let before = previous.messages.count
+            previous.trimMessages(to: Self.retainedMessageLimit)
+            if before != previous.messages.count {
+                DiagFileLog.log("open-trim-previous \(before) -> \(previous.messages.count)")
+            }
+        }
         if isDemoMode { openDemo(session); return }
         if sessionStore.selected?.sessionId == session.sessionId,
            activeConversation?.coordinatorStarted == true { return }
@@ -232,12 +245,27 @@ extension ConnectionModel {
             return true
         }
         messages = (Array(bySequence.values) + pending).sorted { $0.sequence < $1.sequence }
-        // 会话内**不裁**：用户上滑看历史时必须能一直往回翻。
-        // 之前加过 50 条上限，结果上滑加载的更早消息被立刻裁掉（诊断显示 ok +0），
-        // 表现为「翻不出去」。内存压力改由退出时裁剪解决（见 open()）。
+        // 会话内允许上滑翻历史，所以不按「退出后保留量」裁；
+        // 但仍有会话内上限，避免 400 轮那种情况把内存吃到 1.5 GB。
+        trimToInSessionLimit()
         restoreMissingOutboxMessages()
         pruneStaleOutbox()
         timingLog("model_update incoming=\(incoming.count) total=\(messages.count)")
+    }
+
+    /// 把消息裁到「最近 N 条」。
+    ///
+    /// 优先丢最旧的已确认消息，pending（正在发送的）一律保留。
+    /// 裁掉消息后，属于它们的步骤和失败记录也一起裁，避免这些行仍然被渲染。
+    @MainActor
+    func trimToRetentionLimit() {
+        trimMessages(to: Self.retainedMessageLimit)
+    }
+
+    /// 会话内上限：允许翻历史，但不让消息无限累积（超了会 OOM）。
+    @MainActor
+    func trimToInSessionLimit() {
+        trimMessages(to: Self.inSessionMessageLimit)
     }
 
     @MainActor

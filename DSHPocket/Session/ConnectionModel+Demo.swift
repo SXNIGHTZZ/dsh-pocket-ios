@@ -64,8 +64,8 @@ extension ConnectionModel {
         sessionStore.selected = session
         messages = Self.demoMessages(for: session.sessionId)
         steps = Self.demoSteps(for: session.sessionId)
-        // 不裁：List 会回收滚出屏幕的 cell（实测 400 轮只占 389 MB）。
-        // 之前裁是因为 VStack 不回收（会到 1.5 GB），换 List 后这个理由不存在了。
+        // 会话内上限：允许翻历史，但不让压测数据把内存吃爆（退出时另按 24 裁）。
+        trimToInSessionLimit()
         isTurnRunning = session.running
         turnStartedAt = session.running ? Date().addingTimeInterval(-37) : nil
         isLoadingConversation = false

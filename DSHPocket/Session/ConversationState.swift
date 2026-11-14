@@ -98,11 +98,9 @@ final class ConversationState {
 
     /// 裁剪到最近 N 条消息（含步骤与失败记录）。
     ///
-    /// **当前没有任何调用点**，保留作为工具：视图层换成 `List` 后 cell 会被真正回收，
-    /// 400 条消息实测只占 389 MB，不再需要靠「删数据」来省内存。
-    ///
-    /// 历史教训：在用 `VStack`/`LazyVStack`（不回收）时，只能靠裁数据续命；
-    /// 那会牺牲「会话内往上翻历史」这个功能。正确解法是让视图层能回收。
+    /// 调用时机由外部策略决定：
+    /// - 会话**仍在看时**用 `inSessionMessageLimit`（允许上滑翻历史，但不无限涨）
+    /// - 会话**被切走/退出时**用 `retainedMessageLimit`（卸载旧历史，省内存）
     @MainActor
     func trimMessages(to limit: Int) {
         guard messages.count > limit else { return }
