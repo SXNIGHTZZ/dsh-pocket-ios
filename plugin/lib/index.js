@@ -192,7 +192,16 @@ function cloudflareFor(port) {
 async function modeStatus() {
   currentMode = await readMode()
   const modes = MODES.map((id) => ({ id, label: MODE_LABELS[id] }))
-  const base = { mode: currentMode, label: MODE_LABELS[currentMode], modes }
+  // 访问密码与连接方式无关，所有分支都要带上。
+  // 之前只在 tailscaleStatus 里返回，切到 modeStatus 后漏了 → 面板显示「—」（用户反馈）。
+  const pin = await readPin()
+  const base = {
+    mode: currentMode,
+    label: MODE_LABELS[currentMode],
+    modes,
+    pin,
+    pinSet: Boolean(pin),
+  }
 
   if (currentMode === 'cloudflare') {
     const port = dshWebPortRef
