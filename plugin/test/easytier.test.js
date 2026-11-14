@@ -137,3 +137,30 @@ test('findEasytier：没装时返回 null，不抛错', async () => {
   assert.ok(found.core === null || typeof found.core === 'string')
   assert.ok(found.cli === null || typeof found.cli === 'string')
 })
+
+test('shadowrocketConf：skip-proxy 不能含 10.0.0.0/8', async () => {
+  const { shadowrocketConf } = await import('../lib/easytier.js')
+  const conf = shadowrocketConf({ socksHost: '192.168.1.18', socksPort: 1080 })
+  const skipLine = conf.split('\n').find((l) => l.startsWith('skip-proxy'))
+  assert.ok(skipLine)
+  // 10.0.0.0/8 覆盖 10.14.14.0/24，留着就等于让客户端直连虚拟网络
+  assert.ok(!skipLine.includes('10.0.0.0/8'), 'skip-proxy 含 10.0.0.0/8 会让虚拟网段被直连')
+  assert.ok(!skipLine.includes('10.14.14'), '虚拟网段不能出现在 skip-proxy 里')
+})
+
+test('shadowrocketConf：有 SOCKS5 节点和指向它的规则', async () => {
+  const { shadowrocketConf } = await import('../lib/easytier.js')
+  const conf = shadowrocketConf({ socksHost: '192.168.1.18', socksPort: 1080 })
+  assert.match(conf, /\[Proxy\]/)
+  assert.match(conf, /EasyTier = socks5, 192\.168\.1\.18, 1080/)
+  assert.match(conf, /\[Rule\]/)
+  assert.match(conf, /IP-CIDR,10\.14\.14\.0\/24,EasyTier,no-resolve/)
+})
+
+test('shadowrocketConf：默认不劫持全部流量', async () => {
+  const { shadowrocketConf } = await import('../lib/easytier.test.js').catch(() => ({}))
+  const mod = await import('../lib/easytier.js')
+  const conf = mod.shadowrocketConf({ socksHost: '10.0.0.1', socksPort: 1080 })
+  // FINAL 必须是 DIRECT，否则用户所有上网流量都会绕到电脑
+  assert.match(conf, /FINAL,DIRECT/)
+})

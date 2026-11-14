@@ -14,7 +14,7 @@ import { promisify } from 'node:util'
 import QRCode from 'qrcode'
 import { CloudflareTunnel, findCloudflared } from './cloudflare.js'
 import { selectLanIPv4, lanEntryUrl } from './lan.js'
-import { findEasytier, readWireGuardPortal, normalizeWireGuardConfig, clientAddressFrom, coreCommand, randomNetwork } from './easytier.js'
+import { findEasytier, readWireGuardPortal, normalizeWireGuardConfig, clientAddressFrom, coreCommand, randomNetwork, shadowrocketConf } from './easytier.js'
 
 const execFileP = promisify(execFile)
 
@@ -28,6 +28,10 @@ const CHANNEL = '/dsh-pocket-ios'
  * tcp/udp/wg/quic/ws/wss/faketcp，实测复用会 "Address already in use"。
  */
 const EASYTIER_PORTAL_PORT = 11500
+/** EasyTier 的 SOCKS5 端口（--socks5 的参数）。 */
+const EASYTIER_SOCKS_PORT = 1080
+/** WireGuard / 代理客户端用的虚拟网段，与 --vpn-portal 的路径段一致。 */
+const EASYTIER_CLIENT_CIDR = '10.14.14.0/24'
 const TAILSCALE_BIN = '/Applications/Tailscale.app/Contents/MacOS/Tailscale'
 const BODY_MAX = 64 * 1024
 /** 稳定本地入口端口：Tailscale Serve 指向它；默认 3081（与 dsh-pocket 代理端口一致）。 */
@@ -344,6 +348,8 @@ async function modeStatus() {
       state: 'ready',
       error: null,
       config,
+      // Shadowrocket 这类代理客户端用这个订阅 URL（配置里带了显式规则）
+      confUrl: lanIp ? `http://${lanIp}:${PROXY_PORT}${CHANNEL}/easytier.conf` : null,
       hint: `用 WireGuard 客户端（Passepartout / AmneziaVPN）导入并启用，然后在 App 里连接 http://${virtualHost}:${PROXY_PORT}。代理类 App 不行。`,
     }
   }
@@ -533,6 +539,9 @@ export function apply(ctx) {
         const isLogin = rawPath === `${CHANNEL}/login`
           || rawPath === `${CHANNEL}/pair`
           || rawPath === `${CHANNEL}/refresh`
+          // easytier.conf 免认证：代理客户端下载它时没有 DSH cookie。
+          // 内容只有局域网 IP + SOCKS5 端口 + 网段，不含任何凭证。
+          || rawPath === `${CHANNEL}/easytier.conf`
         if (!isLogin && typeof connection?.requestRejection === 'function') {
           const rejection = connection.requestRejection(req)
           if (rejection !== undefined) {
@@ -541,6 +550,28 @@ export function apply(ctx) {
           }
         }
         const urlObject = new URL(req.url ?? '/', 'http://127.0.0.1')
+
+        // Shadowrocket 订阅配置：代理类客户端靠它把 10.14.14.0/24 显式指向 SOCKS5。
+        // 不经过 RPC，直接吐纯文本。
+        if (urlObject.pathname === `${CHANNEL}/easytier.conf`) {
+          const lanIp = selectLanIPv4()
+          if (!lanIp) {
+            send(res, 503, { ok: false, error: '没有局域网地址' })
+            return
+          }
+          const conf = shadowrocketConf({
+            socksHost: lanIp,
+            socksPort: EASYTIER_SOCKS_PORT,
+            portalCidr: EASYTIER_CLIENT_CIDR,
+          })
+          res.writeHead(200, {
+            'content-type': 'text/plain; charset=utf-8',
+            'cache-control': 'no-store',
+          })
+          res.end(conf)
+          return
+        }
+
         const endpoint = endpointFromPath(urlObject.pathname)
         if (endpoint === undefined) {
           send(res, 404, { ok: false })

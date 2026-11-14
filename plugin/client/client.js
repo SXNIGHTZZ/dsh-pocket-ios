@@ -285,6 +285,18 @@ window.__ModuleLoader__.load({
                   React.createElement("span", { style: { fontSize: 11, opacity: 0.55 } },
                     makeT(currentLang())("客户端的扫码不支持时，用这个粘贴导入", "Paste this if your client's scanner won't take it")))
               : null,
+            // Shadowrocket / 代理类客户端：给订阅 URL，配置里带了「10.14.14.0/24 走 SOCKS5」的规则
+            status && status.confUrl
+              ? React.createElement("div", { style: { marginTop: 8, paddingTop: 8, borderTop: "1px dashed rgba(0,0,0,.1)" } },
+                  React.createElement("div", { style: { fontSize: 11, opacity: 0.65, marginBottom: 4 } },
+                    makeT(currentLang())("用 Shadowrocket 这类代理 App：把下面这个地址填进「从 URL 下载配置」", "For proxy apps like Shadowrocket: paste this into \"download config from URL\"")),
+                  React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
+                    React.createElement("code", { style: { fontSize: 11, wordBreak: "break-all", flex: "1 1 200px", minWidth: 0 } }, status.confUrl),
+                    React.createElement("button", { type: "button", onClick: function () { copy(status.confUrl, "conf"); }, style: chipStyle },
+                      copied === "conf" ? makeT(currentLang())("已复制", "Copied") : makeT(currentLang())("复制", "Copy"))),
+                  React.createElement("div", { style: { fontSize: 11, opacity: 0.55, marginTop: 4, lineHeight: 1.5 } },
+                    makeT(currentLang())("它会把 10.14.14.0/24 显式指向 SOCKS5，绕开代理 App 对私有网段的直连。", "It routes 10.14.14.0/24 to SOCKS5 explicitly, bypassing the app's private-subnet shortcut.")))
+              : null,
             actionError ? React.createElement("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 6 } }, actionError) : null,
             (status && status.error) ? React.createElement("div", { style: { fontSize: 11, color: "#b45309", marginTop: 6, lineHeight: 1.5 } }, status.error) : null,
             pairValue.error ? React.createElement("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 6 } }, pairValue.error) : null,

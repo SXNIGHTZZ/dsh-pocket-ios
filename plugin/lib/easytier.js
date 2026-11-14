@@ -252,3 +252,45 @@ export async function readConfigFile(path) {
     return null
   }
 }
+
+/**
+ * 生成 Shadowrocket / 同类代理客户端能用的 `.conf` 配置。
+ *
+ * 为什么需要它：Shadowrocket 是**代理客户端**，它的 `skip-proxy` 默认包含
+ * 私有网段（10.0.0.0/8 等）。EasyTier 的虚拟网络 `10.14.14.0/24` 正好落在里面，
+ * 于是请求被「直连」——即使配了 SOCKS5 节点也进不到虚拟网络。
+ *
+ * 解法：给出一份 `skip-proxy` **不含** 10.14.14.0/24 的配置，并用规则把该网段
+ * 明确指向 SOCKS5 节点。
+ *
+ * @param {{ socksHost: string, socksPort: number, portalCidr: string }} opts
+ * @returns {string}
+ */
+export function shadowrocketConf({ socksHost, socksPort, portalCidr = '10.14.14.0/24' }) {
+  // 注意 10.0.0.0/8 被刻意排除：它覆盖了 10.14.14.0/24，留着就等于直连
+  const skipProxy = [
+    '127.0.0.1',
+    '192.168.0.0/16',
+    '172.16.0.0/12',
+    '100.64.0.0/10',
+    '17.0.0.0/8',
+    'localhost',
+    '*.local',
+  ].join(', ')
+
+  return [
+    '[General]',
+    `bypass-system = true`,
+    `skip-proxy = ${skipProxy}`,
+    'dns-server = 223.5.5.5, 114.114.114.114',
+    'ipv6 = false',
+    '',
+    '[Proxy]',
+    `EasyTier = socks5, ${socksHost}, ${socksPort}`,
+    '',
+    '[Rule]',
+    `IP-CIDR,${portalCidr},EasyTier,no-resolve`,
+    'FINAL,DIRECT',
+    '',
+  ].join('\n')
+}
