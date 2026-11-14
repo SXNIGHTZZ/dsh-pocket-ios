@@ -71,6 +71,16 @@ test('normalizeWireGuardConfig：去掉 # 注释（WireGuard 不支持注释）'
   assert.ok(!out.includes('#'), '不能残留 # 注释，否则客户端解析失败')
 })
 
+test('normalizeWireGuardConfig：重复的 AllowedIPs 去重', () => {
+  const cfg = extractWireGuardConfig(REAL).replace(
+    'AllowedIPs = 10.14.14.0/24',
+    'AllowedIPs = 10.14.14.0/24,10.14.14.0/24'
+  )
+  const out = normalizeWireGuardConfig(cfg, '192.168.1.18', 11500)
+  assert.match(out, /AllowedIPs = 10\.14\.14\.0\/24$/m)
+  assert.equal(out.split('10.14.14.0/24').length - 1, 1, '同一个网段只能出现一次')
+})
+
 test('normalizeWireGuardConfig：网络地址 .0 修成可用主机地址 .2', () => {
   const out = normalizeWireGuardConfig(extractWireGuardConfig(REAL), '192.168.1.18', 11500)
   assert.match(out, /Address = 10\.14\.14\.2\/32/)

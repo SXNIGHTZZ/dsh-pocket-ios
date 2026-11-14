@@ -137,6 +137,13 @@ export function normalizeWireGuardConfig(config, host, port) {
       if (host) out.push(`Endpoint = ${host}:${port}`)
       continue  // 没 host 就整行丢掉，让用户自己填
     }
+    if (/^AllowedIPs\s*=/.test(line)) {
+      // easytier 的输出里会重复同一个网段（"10.14.14.0/24,10.14.14.0/24"），
+      // 去重后再给客户端，避免个别客户端解析异常
+      const cidrs = line.split('=')[1].split(',').map((v) => v.trim()).filter(Boolean)
+      out.push(`AllowedIPs = ${[...new Set(cidrs)].join(', ')}`)
+      continue
+    }
     out.push(line)
   }
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim()
