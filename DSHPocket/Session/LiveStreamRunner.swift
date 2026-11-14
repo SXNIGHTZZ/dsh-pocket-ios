@@ -146,10 +146,27 @@ extension ConnectionModel {
                 return first
             }
         } else {
-            message = try await withTaskCancellationHandler {
-                try await socket.receive()
-            } onCancel: {
-                socket.cancel(with: .goingAway, reason: nil)
+            // 空闲**也要加超时**。公网隧道/中间层回收空闲连接后，TCP 往往不会立刻报错，
+            // `socket.receive()` 就一直不返回——本循环卡在这一行，既不重连也不退出。
+            // 真机实测出现过「Live: connected 但 9 分钟无帧」，期间发消息卡在「发送中」、
+            // 问答卡片收不到结果。阈值比生成中宽（120s），因为空闲本来就不该有帧。
+            message = try await withThrowingTaskGroup(of: URLSessionWebSocketTask.Message.self) { group in
+                group.addTask {
+                    try await withTaskCancellationHandler {
+                        try await socket.receive()
+                    } onCancel: {
+                        socket.cancel(with: .goingAway, reason: nil)
+                    }
+                }
+                group.addTask {
+                    try await Task.sleep(for: LiveStreamPolicy.idleTimeout)
+                    throw ConnectionError.remote("空闲 \(LiveStreamPolicy.idleTimeout) 无实时数据，主动重连")
+                }
+                guard let first = try await group.next() else {
+                    throw ConnectionError.remote("实时连接无数据")
+                }
+                group.cancelAll()
+                return first
             }
         }
         switch message {

@@ -13,7 +13,10 @@ final class LiveStreamPolicyTests: XCTestCase {
         XCTAssertTrue(LiveStreamPolicy.shouldReconnect(isRunning: true, idle: .seconds(25)))
         XCTAssertFalse(LiveStreamPolicy.shouldReconnect(isRunning: true, idle: .seconds(24)))
         // 空闲时长时间没帧是正常的，不能重连。
-        XCTAssertFalse(LiveStreamPolicy.shouldReconnect(isRunning: false, idle: .seconds(120)))
+        // 空闲也要判假死：公网隧道假死时「connected 但无帧」，真机实测出现过 9 分钟无帧。
+        XCTAssertFalse(LiveStreamPolicy.shouldReconnect(isRunning: false, idle: .seconds(119)))
+        XCTAssertTrue(LiveStreamPolicy.shouldReconnect(isRunning: false, idle: .seconds(120)))
+        XCTAssertTrue(LiveStreamPolicy.shouldReconnect(isRunning: false, idle: .seconds(600)))
     }
 
     func testHeartbeatShorterThanIdleTimeout() {
