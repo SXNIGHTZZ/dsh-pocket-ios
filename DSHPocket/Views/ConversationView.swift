@@ -229,18 +229,12 @@ struct ConversationView: View {
                 .environment(\.defaultMinListRowHeight, 0)
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
-                .onPreferenceChange(ConversationHeightKey.self) { _ in
-                    // 行高异步变化（Textual 表格/图片晚渲染）会让内容变高；只要仍在跟随最新，
-                    // 就补一次贴底，避免"最后一条消息下方留出空白"。
-                    // 展开/收起「过程」后的 0.5 秒内不贴底，否则点击会被拽到底部。
-                    guard Date() >= suppressAutoScrollUntil else { return }
-                    guard !userDragging else { return }
-                    guard followsLatest else { return }
-                    DispatchQueue.main.async {
-                        proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
-                    }
-                }
-                .defaultScrollAnchor(.bottom)
+                // 注意：这里不再用 onPreferenceChange 补贴底。
+                // List 的 cell 复用会让高度反复变化，补贴底会把用户上滑拽回底部。
+                // 需要贴底的场景（进会话、发消息）都走 model.scrollToBottomTick 显式触发。
+                // 不要用 .defaultScrollAnchor(.bottom)：ScrollView 里它只定位一次，
+                // 但在 List 里会持续生效——每次 cell 复用导致内容更新都会重新贴底，
+                // 表现就是「用户上滑立刻被拽回底部」（真机实测）。改成进页面时手动滚一次。
                 .scrollDismissesKeyboard(.interactively)
                 .simultaneousGesture(TapGesture().onEnded {
                     composerFocused = false
@@ -268,8 +262,12 @@ struct ConversationView: View {
                 )
                 // 视图刚出现时先补滚一次（打开会话的 tick 可能早于 onChange 订阅）。
                 .onAppear {
-                    // 进页面不再手动滚：ScrollView 已用 .defaultScrollAnchor(.bottom) 定位。
-                    // 两者叠加会先手动滚一次、锚点再校正一次，肉眼就是「贴到超出底部」的过冲。
+                    // 进页面滚到底：List 没有「只定位一次」的锚点语义，这里手动滚一次。
+                    // 延迟一拍等 List 完成首屏布局，否则锚点还没进 cell 就滚不动。
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        guard followsLatest else { return }
+                        proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+                    }
 #if DEBUG
                     if DebugLaunch.expandSteps {
                         expandedGroupIDs = Set(model.stepGroups.map(\.id))
