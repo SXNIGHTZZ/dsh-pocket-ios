@@ -205,6 +205,7 @@ struct MessageRow: View {
                         .padding(.horizontal, 13).padding(.vertical, 10)
                         .background(Color(red: 0.08, green: 0.48, blue: 0.37),
                                     in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                        .layoutDebug("C3", text: LayoutDebug.font(.body))
                         .foregroundStyle(.white)
                     } else {
                         // 助手消息里的 attachment 图片仍显示在气泡上方。
