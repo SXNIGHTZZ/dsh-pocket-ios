@@ -102,6 +102,23 @@ public final class DSHClient: @unchecked Sendable {
     ///
     /// 用于 `userQuestions/answer` 这类「做完就行」的接口——它们的 `value`
     /// 可能是 null 或非字典，用 `rpc()` 会误报「服务器响应格式无效」。
+    /// 同 `rpcVoid`，但返回原始响应体（诊断用：命令式接口出错时看不清服务端到底回了什么）。
+    public func rpcVoidRaw(method: String, args: [String: Any],
+                           timeout: TimeInterval = 20) async throws -> String {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/\(method)"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = timeout
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try RPCRequest(method: method, args: args).encoded()
+        let (data, http) = try await self.http.data(for: urlRequest)
+        let text = String(data: data, encoding: .utf8) ?? "<non-utf8 \(data.count)B>"
+        if let error = DSHError.from(status: http.statusCode, message: text) {
+            throw error
+        }
+        try RPCRequest.ok(from: data)
+        return text
+    }
+
     public func rpcVoid(method: String, args: [String: Any],
                         timeout: TimeInterval = 20) async throws {
         var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/\(method)"))

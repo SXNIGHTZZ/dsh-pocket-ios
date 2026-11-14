@@ -78,15 +78,33 @@ final class QuestionInbox {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                // 用 rpcVoidAdapted 而不是 rpcAdapted：这个接口只关心「答没答上」，
-                // 返回体的 value 可能是 null/非字典，用严格解析会误报
-                // 「服务器响应格式无效」（真机踩过，其实电脑端已经收到了）。
-                try await providers.client().rpcVoidAdapted("userQuestions/answer", args: args)
+                // 用 rpcVoidRawAdapted：只看 result.ok，同时把原始响应体记进诊断。
+                // 之前踩过两个坑：①严格解析 value 会误报「响应格式无效」；
+                // ②回显太简略，真出问题时看不出服务端到底回了什么。
+                let raw = try await providers.client().rpcVoidRawAdapted("userQuestions/answer", args: args)
+                providers.record("回答用户问题：\(request.callId)  raw=\(raw.prefix(200))")
+                // userQuestions/answer 返回 boolean：true = 服务端接受了并排队给 agent；
+                // false = 问题当前不是 continued（已经结束，或没有客户端认领过它）。
+                // 以前这里不检查——宽松解析把 false 吞成空字典，界面假装成功、卡片收起，
+                // 但 agent 永远收不到答案，步骤就一直停在「正在等待你的选择」。
+                if let value = Self.booleanResult(in: raw), value == false {
+                    providers.reportError("回答没被接受：这个问题当前不是等待状态（可能已结束，或需要电脑端 DSH 页面同时打开）")
+                    providers.record("回答被服务端拒绝：\(request.callId)")
+                    return
+                }
                 self.noteSettled(callId: request.callId)
-                providers.record("已回答用户问题：\(request.callId)")
             } catch {
+                providers.record("回答用户问题失败：callId=\(request.callId) err=\(error.localizedDescription)")
                 providers.reportError("回答问题失败：\(error.localizedDescription)")
             }
         }
+    }
+
+    /// 从 `userQuestions/answer` 的原始响应里取 boolean 结果。
+    private static func booleanResult(in raw: String) -> Bool? {
+        guard let data = raw.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let result = object["result"] as? [String: Any] else { return nil }
+        return result["value"] as? Bool
     }
 }

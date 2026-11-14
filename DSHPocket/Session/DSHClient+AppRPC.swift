@@ -22,6 +22,16 @@ extension DSHClient {
         }
     }
 
+    /// 命令式适配版（返回原始响应体，诊断用）。
+    func rpcVoidRawAdapted(_ endpoint: String, args: [String: Any],
+                           timeout: TimeInterval = 20) async throws -> String {
+        do {
+            return try await rpcVoidRaw(method: endpoint, args: args, timeout: timeout)
+        } catch let error as DSHError {
+            throw ConnectionError.from(error, address: baseURL.absoluteString)
+        }
+    }
+
     /// 命令式适配版：只确认成功，不解析 value。
     func rpcVoidAdapted(_ endpoint: String, args: [String: Any],
                         timeout: TimeInterval = 20) async throws {
