@@ -1,6 +1,33 @@
 // 布局调试模式
 
 import SwiftUI
+import Observation
+
+/// 调试模式的开关状态。
+///
+/// **为什么不用 `@AppStorage` 直接写在 `enum` 的 static 属性上**：
+/// `@AppStorage` 只有在 `View`（或 `@Observable`）里才能触发重绘。写在 enum 的
+/// `static var` 上时，SwiftUI 完全不知道它变了——表现就是「关掉开关，红线还在」，
+/// 必须重启 App 才生效。真机踩过。
+///
+/// 这里用 `@Observable` 单例包一层，读写都落 `UserDefaults`，但变更能被视图感知。
+@Observable
+final class LayoutDebugStore {
+    static let shared = LayoutDebugStore()
+
+    private static let key = "dsh-pocket.layout-debug"
+
+    var enabled: Bool {
+        didSet {
+            guard enabled != oldValue else { return }
+            UserDefaults.standard.set(enabled, forKey: Self.key)
+        }
+    }
+
+    private init() {
+        enabled = UserDefaults.standard.bool(forKey: Self.key)
+    }
+}
 
 /// 布局调试：给关键组件画细红框 + 小字编号 + 间距数字，方便用「C2 太紧」这种说法对齐。
 ///
@@ -14,7 +41,11 @@ import SwiftUI
 /// - `G*` = 全局（导航栏、提示条）
 enum LayoutDebug {
     /// 开关。默认关；正式包里也保留，用户要在真机上用它反馈布局问题。
-    @AppStorage("dsh-pocket.layout-debug") static var enabled = false
+    /// 转发到单例，保证「切换后立即重绘」（见 `LayoutDebugStore` 的注释）。
+    static var enabled: Bool {
+        get { LayoutDebugStore.shared.enabled }
+        set { LayoutDebugStore.shared.enabled = newValue }
+    }
 
     struct Entry: Identifiable {
         let id: String
@@ -115,8 +146,12 @@ private struct LayoutDebugModifier: ViewModifier {
     let gap: String?
     let text: String?
 
+    /// 直接持有 store 才能让 SwiftUI 订阅它的变化；读 `LayoutDebug.enabled`
+    /// 那个转发属性不会建立依赖关系。
+    @State private var store = LayoutDebugStore.shared
+
     func body(content: Content) -> some View {
-        if LayoutDebug.enabled {
+        if store.enabled {
             content
                 // ⚠️ `allowsHitTesting(false)` 必须加在**每个 overlay 内部**，
                 // 不能加在整条视图链上——那样连 content 本身都点不动了。
