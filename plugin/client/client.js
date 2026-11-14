@@ -276,6 +276,15 @@ window.__ModuleLoader__.load({
             status && status.hint
               ? React.createElement("div", { style: { fontSize: 11, color: "#147A5E", marginTop: 8, lineHeight: 1.5 } }, status.hint)
               : null,
+            // 部分客户端（如 Streisand）的「扫码」只认订阅 URL，不认配置文本。
+            // 给一个复制按钮，让用户直接粘贴配置，不用跟二维码较劲。
+            status && status.config
+              ? React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" } },
+                  React.createElement("button", { type: "button", onClick: function () { copy(status.config, "wg"); }, style: chipStyle },
+                    copied === "wg" ? makeT(currentLang())("已复制配置", "Config copied") : makeT(currentLang())("复制 WireGuard 配置", "Copy WireGuard config")),
+                  React.createElement("span", { style: { fontSize: 11, opacity: 0.55 } },
+                    makeT(currentLang())("客户端的扫码不支持时，用这个粘贴导入", "Paste this if your client's scanner won't take it")))
+              : null,
             actionError ? React.createElement("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 6 } }, actionError) : null,
             (status && status.error) ? React.createElement("div", { style: { fontSize: 11, color: "#b45309", marginTop: 6, lineHeight: 1.5 } }, status.error) : null,
             pairValue.error ? React.createElement("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 6 } }, pairValue.error) : null,
