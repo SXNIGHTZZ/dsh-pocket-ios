@@ -1,7 +1,7 @@
 {
   "name": "dsh-pocket-ios",
-  "version": "0.2.5",
-  "description": "在 DSH 设置页加入 iOS 客户端下载二维码与连接引导（配合 dsh-pocket + DSH Pocket iOS）",
+  "version": "0.3.0",
+  "description": "在 DSH 设置页提供 iOS 连接引导：Cloudflare / Tailscale / EasyTier 三种方式可切换，Cloudflare 手机端零安装",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

@@ -92,6 +92,7 @@ window.__ModuleLoader__.load({
       var busyState = React.useState(false);
       var busy = busyState[0];
       var setBusy = busyState[1];
+      var pollRef = React.useRef(null);
       var errorState = React.useState(null);
       var actionError = errorState[0];
       var setActionError = errorState[1];
@@ -110,6 +111,11 @@ window.__ModuleLoader__.load({
         if (!props.rpcCall) { setLoading(false); return; }
         Promise.resolve(props.rpcCall("tailscale.status", {})).then(unwrapRpc).then(function (s) {
           setStatus(s || null); setLoading(false);
+          // 一旦就绪就停轮询，并补生成二维码（地址此刻才有效）
+          if (s && s.state === "ready") {
+            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            if (s.mode === "cloudflare") generatePair();
+          }
         }).catch(function () { setLoading(false); });
       };
 
@@ -135,7 +141,13 @@ window.__ModuleLoader__.load({
             return next;
           });
         }, 1000);
-        return function () { clearInterval(timer); };
+        // 隧道/下载还没就绪时轮询：Cloudflare 首次要下 24MB，不能让用户干等白屏。
+        // 状态从 starting 变 ready 后，再补生成一次二维码（此时的地址才是隧道地址）。
+        var poll = setInterval(function () {
+          refreshStatus();
+        }, 2000);
+        pollRef.current = poll;
+        return function () { clearInterval(timer); if (pollRef.current) clearInterval(pollRef.current); };
       }, []);
 
       var mask = new Array(status && status.pin ? status.pin.length : 8).fill("•").join("");
@@ -200,9 +212,7 @@ window.__ModuleLoader__.load({
               React.createElement("span", { style: { fontWeight: selected ? 600 : 400 } }, m.label));
           })),
         React.createElement("div", { style: { fontSize: 11, opacity: 0.6, marginBottom: 10, lineHeight: 1.5 } }, modeHint),
-        React.createElement("div", { style: { fontWeight: 600, fontSize: 14, marginBottom: 4 } }, makeT(currentLang())("扫码连接（推荐，免密码）", "Scan to connect (recommended, no PIN)")),
-        React.createElement("div", { style: { fontSize: 12, opacity: 0.65, lineHeight: 1.5, marginBottom: 10 } },
-          makeT(currentLang())("用 DSH Pocket 扫描下方二维码即可直接连接，无需输入密码。二维码自动轮换，每次有效 60 秒、仅可使用一次。", "Scan the QR below with DSH Pocket to connect directly — no PIN. The code rotates automatically and each one is valid for 60 seconds, single use.")),
+        React.createElement("div", { style: { height: 1, background: "rgba(0,0,0,.06)", margin: "10px 0" } }),
         React.createElement("div", { style: { display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" } },
           pairValue.data && pairValue.data.qr
             ? React.createElement("img", { src: pairValue.data.qr, alt: makeT(currentLang())("扫码连接二维码", "Scan-to-connect QR"), style: { width: 148, height: 148, borderRadius: 8, background: "#fff", padding: 5, border: "1px solid rgba(0,0,0,.06)", flex: "0 0 148px" } })
@@ -233,8 +243,7 @@ window.__ModuleLoader__.load({
             actionError ? React.createElement("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 6 } }, actionError) : null,
             (status && status.error) ? React.createElement("div", { style: { fontSize: 11, color: "#b45309", marginTop: 6, lineHeight: 1.5 } }, status.error) : null,
             pairValue.error ? React.createElement("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 6 } }, pairValue.error) : null,
-            React.createElement("div", { style: { fontSize: 11, opacity: 0.55, lineHeight: 1.5, marginTop: 10 } },
-              makeT(currentLang())("扫配对码无需密码，最省事；手动登录时用上面的访问密码。密码只保存在本机，请勿截图分享。", "Scanning the pairing QR needs no PIN and is easiest; use the access PIN above for manual login. The PIN stays on this machine — don't share screenshots.")))));
+            null)));
     }
 
     function AppDownloadCard() {
@@ -256,9 +265,7 @@ window.__ModuleLoader__.load({
     function MobileAccessPanel(props) {
       return React.createElement("div", { style: { width: "100%", maxWidth: 680, display: "flex", flexDirection: "column", gap: 12 } },
         React.createElement(AppDownloadCard),
-        React.createElement(AccessPanelCard, { rpcCall: props.rpcCall }),
-        React.createElement("div", { style: { fontSize: 11, opacity: 0.55, lineHeight: 1.5 } },
-          makeT(currentLang())("局域网 / 公网二维码由 dsh-pocket 插件提供（可选）。扫码配对无需密码，推荐优先使用。", "LAN/public QR codes come from the dsh-pocket plugin (optional). Scan-to-pair needs no PIN and is recommended.")));
+        React.createElement(AccessPanelCard, { rpcCall: props.rpcCall }));
     }
 
     function apply(ctx) {

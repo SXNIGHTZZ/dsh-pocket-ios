@@ -198,26 +198,34 @@ async function modeStatus() {
       return { ...base, address: null, qr: null, state: 'error', error: '拿不到 dsh web 端口' }
     }
     const tunnel = cloudflareFor(port)
-    try {
-      // 已就绪就复用；否则启动（首次会自动下载 cloudflared）
-      const url = tunnel.status().state === 'ready' && tunnel.status().url
-        ? tunnel.status().url
-        : await tunnel.start()
-      const qr = await QRCode.toDataURL(url, { margin: 1, width: 360 })
-      return { ...base, address: url, qr, state: 'ready', error: null, phase: null }
-    } catch (error) {
-      const snap = tunnel.status()
-      return {
-        ...base,
-        address: null,
-        qr: null,
-        state: 'error',
-        // 区分「下载失败」和「隧道启动失败」：前者要教用户手动装，后者多半是网络
-        error: snap.phase === 'downloading' || snap.phase === 'retrying'
-          ? `cloudflared 下载/安装失败：${snap.error ?? error?.message ?? error}`
-          : String(error?.message ?? error),
-        phase: snap.phase ?? null,
-      }
+    const snap = tunnel.status()
+
+    // 已就绪 → 直接给地址
+    if (snap.state === 'ready' && snap.url) {
+      const qr = await QRCode.toDataURL(snap.url, { margin: 1, width: 360 })
+      return { ...base, address: snap.url, qr, state: 'ready', error: null, phase: null }
+    }
+
+    // 启动中 → 不阻塞这次 RPC，前端轮询就能看到进度。
+    // **不能在 status 里 await tunnel.start()**：首次要下载 24MB + 等隧道注册，
+    // 会把 RPC 拖到超时，前端只看到 "invalid server-response failure"（2026-11-15 实测）。
+    if (snap.state !== 'starting') {
+      void tunnel.start().catch((error) => {
+        void logLine(`cloudflare start failed: ${error?.message ?? error}`)
+      })
+    }
+    const downloading = snap.phase === 'locating' || snap.phase === 'downloading'
+      || snap.phase === 'extracting' || snap.phase === 'retrying'
+    return {
+      ...base,
+      address: null,
+      qr: null,
+      state: 'starting',
+      error: null,
+      phase: snap.phase ?? null,
+      detail: downloading
+        ? `首次使用，正在准备 cloudflared（约 24MB）：${snap.phaseDetail ?? ''}`
+        : '正在启动 Cloudflare 隧道…',
     }
   }
 
@@ -597,7 +605,8 @@ export function apply(ctx) {
           currentMode = next
           await saveMode(next)
           await logLine(`mode -> ${next}`)
-          const value = await modeStatus()
+          // 立刻回一个轻量状态：切到 cloudflare 时隧道要下载/注册，不能阻塞在这里
+          const value = { mode: next, label: MODE_LABELS[next], modes: MODES.map((id) => ({ id, label: MODE_LABELS[id] })), address: null, qr: null, state: 'starting', error: null, phase: null }
           send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value } })
           return
         }
