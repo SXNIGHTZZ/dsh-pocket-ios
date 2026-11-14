@@ -246,7 +246,9 @@ async function modeStatus() {
           : '没有找到局域网地址：请确认电脑已连上 Wi-Fi 或有线网络',
       }
     }
-    const address = lanEntryUrl(ip, port)
+    // 必须用代理端口：DSH 自己只监听 127.0.0.1:${port}，手机连不上。
+    // 代理（PROXY_PORT）已经在 0.0.0.0 上监听并转发到 DSH。
+    const address = lanEntryUrl(ip, PROXY_PORT)
     const qr = await QRCode.toDataURL(address, { margin: 1, width: 360 })
     return { ...base, address, qr, state: 'ready', error: null }
   }
@@ -413,8 +415,11 @@ function attachStableProxy(ctx, handler) {
     proxyReq.end()
   })
   server.on('error', (error) => ctx?.logger?.warn?.(`dsh-pocket-ios: 稳定入口端口 ${PROXY_PORT} 不可用（${error?.message ?? error}）`))
-  server.listen(PROXY_PORT, '127.0.0.1', () => {
-    ctx?.logger?.info?.(`dsh-pocket-ios: 稳定入口 http://127.0.0.1:${PROXY_PORT} → DSH ${dshPort}`)
+  // 绑 0.0.0.0 而不是只绑回环：局域网模式下手机要能直连这个端口。
+  // 安全性由 DSH 自身的登录态保证（非 /dsh-pocket-ios/ 前缀的请求会原样转发给 DSH，
+  // 未认证时 DSH 返回 401）——这和 dsh-pocket 的做法一致。
+  server.listen(PROXY_PORT, '0.0.0.0', () => {
+    ctx?.logger?.info?.(`dsh-pocket-ios: 稳定入口 http://0.0.0.0:${PROXY_PORT} → DSH 127.0.0.1:${dshPort}`)
   })
   return () => { try { server.close() } catch { /* 已关闭 */ } }
 }
