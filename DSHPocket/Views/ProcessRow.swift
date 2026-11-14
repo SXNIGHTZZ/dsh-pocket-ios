@@ -143,6 +143,6 @@ struct ProcessRow: View {
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .layoutDebug("L1")
+        .layoutDebug("C1", gap: "7pt", text: LayoutDebug.font(.footnote))
     }
 }

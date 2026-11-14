@@ -148,8 +148,10 @@ struct MessageRow: View {
             HStack(spacing: 8) {
                 if !message.isUser {
                     Image(systemName: "sparkle").foregroundStyle(PocketChrome.brandText)
+                        .layoutDebug("C6", gap: "8pt", text: LayoutDebug.font(.caption2))
                 }
                 Text(message.isUser ? L10n.t("你") : "DSH").foregroundStyle(.secondary)
+                    .layoutDebug("C7", text: LayoutDebug.font(.caption2))
                 if !message.text.isEmpty {
                     Button {
                         UIPasteboard.general.string = message.text
@@ -163,6 +165,7 @@ struct MessageRow: View {
                     } label: {
                         Image(systemName: copied ? "checkmark.circle.fill" : "doc.on.doc")
                             .font(.caption2.weight(.medium))
+                            .layoutDebug("C8", text: "14pt 图标")
                             .foregroundStyle(copied ? PocketChrome.brandText : .secondary)
                             .frame(width: 14, height: 14)
                             .scaleEffect(copied ? 1.15 : 1)
@@ -179,6 +182,7 @@ struct MessageRow: View {
                     } label: {
                         Image(systemName: "quote.bubble")
                             .font(.caption2.weight(.medium))
+                            .layoutDebug("C9", text: "14pt 图标")
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 44, minHeight: 44)
                             .contentShape(Rectangle())
@@ -188,7 +192,7 @@ struct MessageRow: View {
                 }
             }
             .font(.caption2.weight(.semibold))
-            .layoutDebug("L2")
+            .layoutDebug("C2", gap: "8pt", text: LayoutDebug.font(.caption2))
             HStack {
                 if message.isUser { Spacer(minLength: 44) }
                 VStack(alignment: .leading, spacing: 8) {
