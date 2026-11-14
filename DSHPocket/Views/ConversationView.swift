@@ -120,7 +120,12 @@ struct ConversationView: View {
     }
 
     private var canSend: Bool {
-        !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !model.draftImages.isEmpty
+        // 发送中必须禁止再点：`sendMessage` 在上一条未完成时是**直接丢弃**新消息的
+        // （压测实测连发 8 条只成功 1 条）。置灰让用户明确知道要等，
+        // 而不是以为发了其实没发。
+        guard !model.isSending else { return false }
+        return !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !model.draftImages.isEmpty
     }
 
     var body: some View {
@@ -248,6 +253,22 @@ struct ConversationView: View {
 #if DEBUG
                     if DebugLaunch.expandSteps {
                         expandedGroupIDs = Set(model.stepGroups.map(\.id))
+                    }
+                    // 压测：连发 N 条，验证顺序与丢失（每条间隔 30ms，远快于一次发送的往返）。
+                    if DebugLaunch.sendBurst > 0 {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(600))
+                            for index in 0..<DebugLaunch.sendBurst {
+                                // 模拟真实 UI：按钮在发送中是置灰的，所以这里也要等，
+                                // 否则测的是「程序化硬闯发送中的锁」，不是用户能触发的路径。
+                                while self.model.isSending {
+                                    try? await Task.sleep(for: .milliseconds(50))
+                                }
+                                self.model.draft = "连发测试 #\(index + 1)"
+                                self.model.sendMessage()
+                                try? await Task.sleep(for: .milliseconds(30))
+                            }
+                        }
                     }
                     if DebugLaunch.scrollToTop {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {

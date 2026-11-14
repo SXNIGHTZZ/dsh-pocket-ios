@@ -41,6 +41,12 @@ enum DebugLaunch {
     static var noFocus: Bool { environment["DSH_NO_FOCUS"] == "1" }
     /// 截图用：使用商店截图专用示例（多轮对话 / 图文 / 时间线标题）。
     static var storeShots: Bool { environment["DSH_STORE_SHOTS"] == "1" }
+    /// 压测：打开会话后立刻连发 N 条消息（每条间隔 30ms），用来验证连发时的顺序与丢失。
+    /// 只在演示模式生效。
+    static var sendBurst: Int {
+        guard let raw = environment["DSH_SEND_BURST"], let n = Int(raw), n > 0 else { return 0 }
+        return min(n, 50)
+    }
     /// 压测场景列表，语法见 `StressScenario`：`messages:400,images:120,steps:80`。
     /// 只在演示模式生效。
     static var stressScenarios: [StressScenario] { StressScenario.parse(environment["DSH_STRESS"]) }
