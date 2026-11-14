@@ -176,11 +176,14 @@ window.__ModuleLoader__.load({
 
       var modes = (status && status.modes) || [
         { id: "cloudflare", label: "Cloudflare" },
+        { id: "lan", label: "局域网" },
         { id: "tailscale", label: "Tailscale" },
         { id: "easytier", label: "EasyTier" }
       ];
       var activeMode = (status && status.mode) || "cloudflare";
-      var modeHint = activeMode === "cloudflare"
+      var modeHint = activeMode === "lan"
+        ? makeT(currentLang())("手机和电脑连同一个 Wi-Fi 时用这个：不经过任何服务器，速度最快也最稳。换到别的网络就连不上了。", "Use this when phone and computer share a Wi-Fi: no server involved, fastest and most stable. Won't work from other networks.")
+        : activeMode === "cloudflare"
         ? makeT(currentLang())("手机不用装任何东西，扫码直接连。适合局域网/临时使用。首次会自动下载约 20MB 的 cloudflared。", "Nothing to install on the phone — just scan. Best for LAN or temporary use. First run auto-downloads cloudflared (~20MB).")
         : activeMode === "easytier"
           ? makeT(currentLang())("需要在 App Store（海外区）安装 EasyTier，约 $0.99，且要自己配网络名和密钥。适合会自建的技术用户。", "Requires EasyTier from an overseas App Store (~$0.99) plus your own network name and secret. For users who self-host.")
@@ -189,6 +192,9 @@ window.__ModuleLoader__.load({
       return React.createElement("div", { style: { padding: 14, borderRadius: 12, border: "1px solid rgba(0,0,0,.08)" } },
         // 三种方式的差异说明（放在圆点上方，让用户先知道门槛再选）
         React.createElement("div", { style: { fontSize: 11, opacity: 0.65, lineHeight: 1.6, marginBottom: 8 } },
+          React.createElement("div", null,
+            React.createElement("b", null, "局域网"),
+            makeT(currentLang())("　同一 Wi-Fi 直连，最快最稳，不用装任何东西", "　Same Wi-Fi, direct — fastest and most stable, nothing to install")),
           React.createElement("div", null,
             React.createElement("b", null, "Cloudflare"),
             makeT(currentLang())("　手机零安装，扫码即连（推荐）", "　Phone installs nothing; scan to connect (recommended)")),

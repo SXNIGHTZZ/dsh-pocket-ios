@@ -13,6 +13,7 @@ import { createServer, request as httpRequest } from 'node:http'
 import { promisify } from 'node:util'
 import QRCode from 'qrcode'
 import { CloudflareTunnel, findCloudflared } from './cloudflare.js'
+import { selectLanIPv4, lanEntryUrl } from './lan.js'
 
 const execFileP = promisify(execFile)
 
@@ -133,10 +134,11 @@ async function readConfiguredUrl() {
 /** 供 RPC 与单测使用：返回 Tailscale 连接信息与带访问密码的二维码。 */
 /** 三种连接方式。默认 Tailscale。 */
 // 顺序即门槛从低到高：Cloudflare（手机零安装）→ Tailscale（需账号）→ EasyTier（需海外 App + 付费）
-const MODES = ['cloudflare', 'tailscale', 'easytier']
+const MODES = ['cloudflare', 'lan', 'tailscale', 'easytier']
 const MODE_LABELS = {
-  tailscale: 'Tailscale',
   cloudflare: 'Cloudflare',
+  lan: '局域网',
+  tailscale: 'Tailscale',
   easytier: 'EasyTier',
 }
 
@@ -227,6 +229,26 @@ async function modeStatus() {
         ? `首次使用，正在准备 cloudflared（约 24MB）：${snap.phaseDetail ?? ''}`
         : '正在启动 Cloudflare 隧道…',
     }
+  }
+
+  if (currentMode === 'lan') {
+    // 局域网直连：不经过任何隧道。同一 Wi-Fi 下这是最快最稳的方式。
+    const ip = selectLanIPv4()
+    const port = dshWebPortRef
+    if (!ip || !port) {
+      return {
+        ...base,
+        address: null,
+        qr: null,
+        state: 'error',
+        error: ip
+          ? '拿不到 dsh web 端口'
+          : '没有找到局域网地址：请确认电脑已连上 Wi-Fi 或有线网络',
+      }
+    }
+    const address = lanEntryUrl(ip, port)
+    const qr = await QRCode.toDataURL(address, { margin: 1, width: 360 })
+    return { ...base, address, qr, state: 'ready', error: null }
   }
 
   if (currentMode === 'easytier') {
