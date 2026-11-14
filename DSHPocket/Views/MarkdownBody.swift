@@ -16,9 +16,23 @@ import ImageIO
 import UserNotifications
 
 
-struct MarkdownBody: View {
+/// Markdown 渲染体。
+///
+/// **为什么要 Equatable**：这是个值类型，SwiftUI 每次给父视图求值都会重新创建它。
+/// 而 `StructuredText(markdown:)` 是「解析 + 布局」的重活——会话里有 28 条消息时，
+/// 任何一次状态变化（滚动位置、计时器、实时帧）都可能触发 28 次重新解析。
+/// 声明 Equatable 后，只要 `text` 和 `foreground` 没变，SwiftUI 会跳过重建。
+///
+/// 真机现象：28 条消息 / 134 个步骤的会话占 368 MB footprint，内存曲线
+/// 在 237–472 MB 之间反复波动——符合「大对象反复创建又释放」的特征
+/// （数据层只有 38.7 KB 文本，撑不起这个量）。
+struct MarkdownBody: View, Equatable {
     let text: String
     var foreground: Color = .primary
+
+    static func == (lhs: MarkdownBody, rhs: MarkdownBody) -> Bool {
+        lhs.text == rhs.text && lhs.foreground == rhs.foreground
+    }
 
     var body: some View {
         StructuredText(markdown: Self.strippingCodeLanguage(text))

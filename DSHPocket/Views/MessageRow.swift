@@ -81,7 +81,7 @@ struct MessageRow: View {
                 ForEach(Array(model.markdownSegments(quoted.rest).enumerated()), id: \.offset) { _, segment in
                     switch segment {
                     case .text(let markdown):
-                        MarkdownBody(text: markdown, foreground: .white)
+                        MarkdownBody(text: markdown, foreground: .white).equatable()
                             .textSelection(.enabled)
                             .tint(Color(red: 0.10, green: 0.35, blue: 0.95))
                     case .image(let url, let caption):
@@ -100,7 +100,7 @@ struct MessageRow: View {
             ForEach(Array(model.markdownSegments(message.text).enumerated()), id: \.offset) { _, segment in
                 switch segment {
                 case .text(let markdown):
-                    MarkdownBody(text: markdown, foreground: message.isUser ? .white : .primary)
+                    MarkdownBody(text: markdown, foreground: message.isUser ? .white : .primary).equatable()
                         .textSelection(.enabled)
                         // 绿色气泡里选区高亮默认取全局绿色 tint → 选中几乎看不出来。
                         // 保持同一绿色色系，用更浅的薄荷绿做选区高亮，和深绿气泡形成明暗对比；
