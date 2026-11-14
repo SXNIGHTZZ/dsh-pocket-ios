@@ -235,6 +235,8 @@ async function modeStatus() {
     // 局域网直连：不经过任何隧道。同一 Wi-Fi 下这是最快最稳的方式。
     const ip = selectLanIPv4()
     const port = dshWebPortRef
+    // 诊断：lan 分支返回 error 时最常见的两个原因就是这两个为 null
+    void logLine(`lan status: ip=${ip ?? 'null'} dshPort=${port ?? 'null'} proxyPort=${PROXY_PORT}`)
     if (!ip || !port) {
       return {
         ...base,
@@ -658,10 +660,19 @@ export function apply(ctx) {
           const status = await modeStatus()
           let base = status.address
           if (!base) {
-            const host = String(req.headers.host ?? '')
-            const forwardedProto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim()
-            const isLoopback = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host)
-            base = `${forwardedProto || (isLoopback ? 'http' : 'https')}://${host}`
+            // 回退到**局域网可达**的地址，绝不能用 req.headers.host。
+            // 面板是用户在浏览器里用 http://127.0.0.1:<port> 打开的，那个 host 拼出来的
+            // 二维码在手机上指向手机自己 → 扫了必失败（2026-11-15 实测：三种模式全废）。
+            // 局域网没地址时最后才用 host 兜底（至少本机测试能用）。
+            const lanIp = selectLanIPv4()
+            if (lanIp) {
+              base = `http://${lanIp}:${PROXY_PORT}`
+            } else {
+              const host = String(req.headers.host ?? '')
+              const forwardedProto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim()
+              const isLoopback = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host)
+              base = `${forwardedProto || (isLoopback ? 'http' : 'https')}://${host}`
+            }
           }
           // **必须走插件自己的 /pair 端点**，不是根路径。
           // 之前生成的是 `${base}/?pair=`，代理会把它当普通请求转发给 DSH，

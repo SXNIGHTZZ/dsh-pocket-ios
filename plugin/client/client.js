@@ -101,8 +101,12 @@ window.__ModuleLoader__.load({
         if (!props.rpcCall) return;
         setBusy(true); setActionError(null);
         Promise.resolve(props.rpcCall("mode.set", { mode: mode })).then(unwrapRpc).then(function (st) {
+          // mode.set 返回的是轻量状态（address 为 null，避免切到 Cloudflare 时被
+          // 下载/注册拖到超时）。直接拿它渲染会显示「当前方式还没有地址」，
+          // 所以立刻再拉一次完整状态。
           setStatus(st || null); setBusy(false);
-          // 切了模式，二维码必须重新生成（Cloudflare 的地址每次都变）
+          refreshStatus();
+          // 切了模式，二维码必须重新生成（Cloudflare / 局域网的地址都不同）
           generatePair();
         }).catch(function (e) { setBusy(false); setActionError(String((e && e.message) || e)); });
       };

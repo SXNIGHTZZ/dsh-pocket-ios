@@ -162,7 +162,9 @@ export class CloudflareTunnel {
       })
       child.once('exit', (code) => {
         clearTimeout(timer)
-        // 正常退出时（切换/停止）不该 reject，交给 stop() 管理
+        // 主动 stop() 时也会触发 exit——那不是失败，不能 reject。
+        // 之前没区分，导致每次切模式都记一条 "cloudflared 退出，code=null" 的假失败。
+        if (this.stopping) return
         reject(new Error(`cloudflared 退出，code=${code}`))
       })
     }).catch((err) => {
@@ -179,6 +181,7 @@ export class CloudflareTunnel {
 
   /** 停掉子进程。幂等。 */
   async stop() {
+    this.stopping = true
     const child = this.child
     this.child = null
     this.url = null
@@ -193,6 +196,7 @@ export class CloudflareTunnel {
       ])
       if (!killed) child.kill('SIGKILL')
     } catch { /* 已经死了 */ }
+    this.stopping = false
   }
 
   /** 状态快照（不启动）。 */
