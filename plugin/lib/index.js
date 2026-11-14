@@ -472,6 +472,28 @@ export function apply(ctx) {
           send(res, 404, { ok: false })
           return
         }
+/**
+ * 推断原始请求该用 http 还是 https。
+ *
+ * 关键：**局域网 / 私有网段一律 http**。它们没有 TLS 证书，拼成 https 会直接连不上。
+ *
+ * 旧实现只把 loopback 当 http，其他全当 https，于是局域网配对成功后 302 到
+ * `https://192.168.x.x:3091/` —— 手机连不上，表现为「局域网模式进不去」。
+ * Tailscale 那条本来就是 https，所以从日志看不出来（2026-11-15 定位）。
+ *
+ * @param {import('node:http').IncomingMessage} req
+ * @param {string} host 请求的 Host 头
+ * @returns {'http'|'https'}
+ */
+function guessProto(req, host) {
+  const forwarded = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim()
+  if (forwarded === 'http' || forwarded === 'https') return forwarded
+  const bare = String(host).replace(/:\d+$/, '')
+  if (/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|169\.254\.)/.test(bare)) return 'http'
+  if (/^(localhost|\[::1\]|.*\.local)$/i.test(bare)) return 'http'
+  return 'https'
+}
+
         // 登录端点：不需要已有浏览器会话，用本插件自己的 PIN 换 DSH 的认证 cookie。
         if (endpoint === 'pair') {
           if (req.method !== 'POST' && req.method !== 'GET') { send(res, 405, { ok: false }); return }
@@ -497,9 +519,7 @@ export function apply(ctx) {
           // 删掉的后果是「第二次打开就说过期」，用户完全无法理解。
           const host = String(req.headers.host ?? '')
           if (!host || typeof connection?.authenticatedUrl !== 'function') { send(res, 503, { ok: false }); return }
-          const forwardedProto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim()
-          const isLoopback = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host)
-          const proto = forwardedProto || (isLoopback ? 'http' : 'https')
+          const proto = guessProto(req, host)
           const target = connection.authenticatedUrl(`${proto}://${host}/`)
           // 顺带签发长期设备凭证：cookie 是 session 级的，DSH 重启后失效，
           // App 靠这份凭证换新 cookie，不必重新扫码。
@@ -557,9 +577,7 @@ export function apply(ctx) {
             send(res, 503, { ok: false })
             return
           }
-          const forwardedProto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim()
-          const isLoopback = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host)
-          const proto = forwardedProto || (isLoopback ? 'http' : 'https')
+          const proto = guessProto(req, host)
           const target = connection.authenticatedUrl(`${proto}://${host}/`)
           res.writeHead(302, { location: target, 'cache-control': 'no-store' })
           res.end()
@@ -593,9 +611,7 @@ export function apply(ctx) {
           }
           const host = String(req.headers.host ?? '')
           if (!host || typeof connection?.authenticatedUrl !== 'function') { send(res, 503, { ok: false }); return }
-          const forwardedProto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim()
-          const isLoopback = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host)
-          const proto = forwardedProto || (isLoopback ? 'http' : 'https')
+          const proto = guessProto(req, host)
           const target = connection.authenticatedUrl(`${proto}://${host}/`)
           record.lastUsedAt = Date.now()
           await saveDevices(devices)
@@ -699,7 +715,8 @@ export function apply(ctx) {
           //     必然「sign in link 过期」）
           const pairURL = `${base}/?pair=${encodeURIComponent(pairToken)}`
           const qr = await QRCode.toDataURL(pairURL, { margin: 1, width: 360 })
-          await logLine('pair token created')
+          // 把生成的 URL 记下来（token 只留前 6 位），排查「扫出来的地址不对」时一眼可见
+          await logLine(`pair token created: ${pairURL.replace(/pair=([^&]{6})[^&]*/, 'pair=$1…')}`)
           send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value: { url: pairURL, qr, expiresIn: 300 } } })
           return
         }
