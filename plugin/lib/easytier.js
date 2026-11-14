@@ -83,12 +83,76 @@ export async function findEasytier() {
  */
 export function extractWireGuardConfig(text) {
   const raw = String(text ?? '')
+  // easytier-cli 用这组标记包住配置，优先用它（比找 [Interface] 精确）
+  const begin = raw.indexOf('client_config_start')
+  const end = raw.indexOf('client_config_end')
+  if (begin >= 0 && end > begin) {
+    const marked = raw.slice(begin, end)
+    const start = marked.indexOf('[Interface]')
+    if (start >= 0) {
+      const body = marked.slice(start).trim()
+      if (body.includes('[Peer]')) return body
+    }
+  }
+  // 没有标记时退回老办法
   const start = raw.indexOf('[Interface]')
   if (start < 0) return null
   const body = raw.slice(start).trim()
-  // 必须同时有 [Interface] 和 [Peer]，否则不是一份能用的配置
   if (!body.includes('[Peer]')) return null
   return body
+}
+
+/**
+ * 清理 easytier 给的模板：去掉 `#` 注释，并把 Address / Endpoint 改成真正可用。
+ *
+ * 实测 `easytier-cli vpn-portal` 给的模板是这个样子：
+ *   Address = 10.14.14.0/32   # should assign an ip from this cidr manually
+ *   Endpoint = 0.0.0.0:11500  # should be the public ip(or domain) of the vpn server
+ *
+ * 两处都不能直接用：
+ *   - 10.14.14.0 是**网络地址**，塞进手机后无法通信
+ *   - 0.0.0.0 在手机上指向手机自己
+ *
+ * @param {string} config 原始配置
+ * @param {string} host 手机可达的主机（局域网 IP）
+ * @param {number} port
+ * @returns {string}
+ */
+export function normalizeWireGuardConfig(config, host, port) {
+  const lines = String(config ?? '').split('\n').map((line) => {
+    // 去掉行尾注释（WireGuard 配置不支持 # 注释）
+    const hash = line.indexOf('#')
+    return (hash >= 0 ? line.slice(0, hash) : line).trimEnd()
+  })
+
+  const out = []
+  for (const line of lines) {
+    if (/^Address\s*=/.test(line)) {
+      // 分配 cidr 里的一个主机地址（.0 是网络地址、.1 假设给服务端，取 .2）
+      const cidr = line.split('/')[1] ?? '32'
+      out.push(`Address = ${clientAddressFrom(config)}/${cidr}`)
+      continue
+    }
+    if (/^Endpoint\s*=/.test(line)) {
+      if (host) out.push(`Endpoint = ${host}:${port}`)
+      continue  // 没 host 就整行丢掉，让用户自己填
+    }
+    out.push(line)
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/**
+ * 从配置里的 AllowedIPs 推断客户端该用的地址：网段 + .2。
+ *
+ * 用 .2 而不是 .0/.1：.0 是网络地址，.1 惯例留给服务端。
+ * @param {string} config
+ * @returns {string}
+ */
+export function clientAddressFrom(config) {
+  const m = String(config ?? '').match(/AllowedIPs\s*=\s*(\d+\.\d+\.\d+)\.0\/2[0-9]/)
+  const prefix = m ? m[1] : '10.14.14'
+  return `${prefix}.2`
 }
 
 /**

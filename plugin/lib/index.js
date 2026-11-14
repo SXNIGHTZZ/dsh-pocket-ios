@@ -14,7 +14,7 @@ import { promisify } from 'node:util'
 import QRCode from 'qrcode'
 import { CloudflareTunnel, findCloudflared } from './cloudflare.js'
 import { selectLanIPv4, lanEntryUrl } from './lan.js'
-import { findEasytier, readWireGuardPortal, patchEndpoint, coreCommand, randomNetwork } from './easytier.js'
+import { findEasytier, readWireGuardPortal, normalizeWireGuardConfig, coreCommand, randomNetwork } from './easytier.js'
 
 const execFileP = promisify(execFile)
 
@@ -22,8 +22,12 @@ export const name = 'dsh-pocket-ios'
 export const inject = ['connection', 'webServer']
 
 const CHANNEL = '/dsh-pocket-ios'
-/** EasyTier WireGuard 门户端口（easytier 默认 11011）。 */
-const EASYTIER_PORTAL_PORT = 11011
+/**
+ * EasyTier WireGuard 门户端口。
+ * **不能落在 11010–11013**：EasyTier 默认已在那几个端口上监听
+ * tcp/udp/wg/quic/ws/wss/faketcp，实测复用会 "Address already in use"。
+ */
+const EASYTIER_PORTAL_PORT = 11500
 const TAILSCALE_BIN = '/Applications/Tailscale.app/Contents/MacOS/Tailscale'
 const BODY_MAX = 64 * 1024
 /** 稳定本地入口端口：Tailscale Serve 指向它；默认 3081（与 dsh-pocket 代理端口一致）。 */
@@ -325,7 +329,7 @@ async function modeStatus() {
     // 有配置：把 Endpoint 换成本机可达地址（easytier 常给 0.0.0.0）
     const lanIp = selectLanIPv4()
     const host = lanIp || ''
-    const config = patchEndpoint(wg, host, EASYTIER_PORTAL_PORT)
+    const config = normalizeWireGuardConfig(wg, host, EASYTIER_PORTAL_PORT)
     const qr = await QRCode.toDataURL(config, { margin: 1, width: 360 })
     return {
       ...base,

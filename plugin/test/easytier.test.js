@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 
 import {
   extractWireGuardConfig,
-  patchEndpoint,
+  normalizeWireGuardConfig,
+  clientAddressFrom,
   coreCommand,
   randomNetwork,
   findEasytier,
@@ -39,27 +40,57 @@ test('extractWireGuardConfig：完全没配置时返回 null', () => {
   assert.equal(extractWireGuardConfig(''), null)
 })
 
-test('patchEndpoint：把通配 Endpoint 换成实际主机', () => {
-  const out = patchEndpoint(SAMPLE, '192.168.1.18', 11011)
-  assert.match(out, /Endpoint = 192\.168\.1\.18:11011/)
-  assert.ok(!out.includes('0.0.0.0'))
-})
+// easytier-cli 的真实输出：带标记、带 # 注释、Address 是网络地址
+const REAL = `portal_name: wireguard
 
-test('patchEndpoint：没有 Endpoint 行时补进 [Peer] 段', () => {
-  const noEndpoint = `[Interface]
-Address = 10.0.0.2/32
+############### client_config_start ###############
+
+[Interface]
+PrivateKey = 1y/dG8OzqbNIHkjCOffKW1KdieFkfl1i4GkAU3seKcU=
+Address = 10.14.14.0/32 # should assign an ip from this cidr manually
 
 [Peer]
-PublicKey = k=
-AllowedIPs = 10.0.0.0/24`
-  const out = patchEndpoint(noEndpoint, 'example.com', 11011)
-  assert.match(out, /Endpoint = example\.com:11011/)
-  // 必须在 [Peer] 之后
-  assert.ok(out.indexOf('Endpoint') > out.indexOf('[Peer]'))
+PublicKey = 2lQgea43LmtZC8eCN3P5Xds2Vv0ngSl0Yfk9uDVwc3Q=
+AllowedIPs = 10.14.14.0/24
+Endpoint = 0.0.0.0:11500 # should be the public ip(or domain) of the vpn server
+PersistentKeepalive = 25
+
+############### client_config_end ###############
+`
+
+test('extractWireGuardConfig：按 client_config_start/end 标记截取', () => {
+  const out = extractWireGuardConfig(REAL)
+  assert.ok(out)
+  assert.ok(out.startsWith('[Interface]'))
+  assert.ok(!out.includes('client_config_end'))
+  assert.ok(!out.includes('portal_name'))
 })
 
-test('patchEndpoint：没给 host 时原样返回', () => {
-  assert.equal(patchEndpoint(SAMPLE, '', 11011), SAMPLE)
+test('normalizeWireGuardConfig：去掉 # 注释（WireGuard 不支持注释）', () => {
+  const out = normalizeWireGuardConfig(extractWireGuardConfig(REAL), '192.168.1.18', 11500)
+  assert.ok(!out.includes('#'), '不能残留 # 注释，否则客户端解析失败')
+})
+
+test('normalizeWireGuardConfig：网络地址 .0 修成可用主机地址 .2', () => {
+  const out = normalizeWireGuardConfig(extractWireGuardConfig(REAL), '192.168.1.18', 11500)
+  assert.match(out, /Address = 10\.14\.14\.2\/32/)
+  assert.ok(!out.includes('10.14.14.0/32'), '.0 是网络地址，塞进客户端无法通信')
+})
+
+test('normalizeWireGuardConfig：Endpoint 换成本机可达地址', () => {
+  const out = normalizeWireGuardConfig(extractWireGuardConfig(REAL), '192.168.1.18', 11500)
+  assert.match(out, /Endpoint = 192\.168\.1\.18:11500/)
+  assert.ok(!out.includes('0.0.0.0'), '0.0.0.0 在手机上指手机自己')
+})
+
+test('normalizeWireGuardConfig：没给 host 时丢掉 Endpoint 行', () => {
+  const out = normalizeWireGuardConfig(extractWireGuardConfig(REAL), '', 11500)
+  assert.ok(!out.includes('Endpoint'), '宁可留空让用户自己填，也不给 0.0.0.0')
+})
+
+test('clientAddressFrom：从 AllowedIPs 推断 /24 网段的主机地址', () => {
+  assert.equal(clientAddressFrom(REAL), '10.14.14.2')
+  assert.equal(clientAddressFrom(''), '10.14.14.2')
 })
 
 test('coreCommand：包含所有必需参数', () => {
