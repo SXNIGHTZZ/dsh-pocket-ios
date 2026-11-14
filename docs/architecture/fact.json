@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-11-14T11:54:04+08:00",
-  "commit": "3fe9845",
+  "generated_at": "2026-11-14T12:14:11+08:00",
+  "commit": "eb52365",
   "layers": [
     {
       "layer": "pure-logic",
@@ -12,7 +12,7 @@
       "layer": "app",
       "role": "App 编排层与视图",
       "files": 93,
-      "lines": 12530
+      "lines": 12557
     },
     {
       "layer": "ui-tests",
@@ -930,7 +930,7 @@
     {
       "file": "DSHPocket/Model/DebugLaunch.swift",
       "layer": "app",
-      "lines": 58,
+      "lines": 64,
       "types": [
         "DebugLaunch"
       ],
@@ -2137,7 +2137,7 @@
     {
       "file": "DSHPocket/Views/ConversationView.swift",
       "layer": "app",
-      "lines": 554,
+      "lines": 575,
       "types": [
         "ConversationView"
       ],
