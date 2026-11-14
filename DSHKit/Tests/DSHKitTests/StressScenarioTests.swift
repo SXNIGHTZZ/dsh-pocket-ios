@@ -31,3 +31,29 @@ final class StressScenarioTests: XCTestCase {
         XCTAssertEqual(StressScenario.markdownExtreme.messageRounds, 1)
     }
 }
+
+final class MarkdownScenarioTests: XCTestCase {
+    func testParsesMarkdownSubScenarios() {
+        XCTAssertEqual(StressScenario.parse("markdown:table:100"), [.markdownTable(100)])
+        XCTAssertEqual(StressScenario.parse("markdown:code:500"), [.markdownCode(500)])
+        XCTAssertEqual(StressScenario.parse("markdown:text:200"), [.markdownText(200)])
+    }
+
+    func testMarkdownSubScenariosClampAndReject() {
+        XCTAssertEqual(StressScenario.parse("markdown:table:99999"), [.markdownTable(StressScenario.maxCount)])
+        XCTAssertEqual(StressScenario.parse("markdown:table:0"), [])
+        XCTAssertEqual(StressScenario.parse("markdown:bogus:10"), [])
+    }
+}
+
+final class SingleLineScenarioTests: XCTestCase {
+    func testParsesSingleLine() {
+        XCTAssertEqual(StressScenario.parse("markdown:singleline:950"), [.markdownSingleLine(950)])
+    }
+}
+
+final class CodePlainScenarioTests: XCTestCase {
+    func testParsesCodePlain() {
+        XCTAssertEqual(StressScenario.parse("markdown:codeplain:950"), [.markdownCodePlain(950)])
+    }
+}

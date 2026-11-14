@@ -1,18 +1,18 @@
 {
-  "generated_at": "2026-11-14T11:37:58+08:00",
-  "commit": "147ac29",
+  "generated_at": "2026-11-14T11:54:04+08:00",
+  "commit": "3fe9845",
   "layers": [
     {
       "layer": "pure-logic",
       "role": "纯逻辑层：策略/解析/传输，禁止依赖 UI",
       "files": 59,
-      "lines": 3528
+      "lines": 3557
     },
     {
       "layer": "app",
       "role": "App 编排层与视图",
       "files": 93,
-      "lines": 12424
+      "lines": 12530
     },
     {
       "layer": "ui-tests",
@@ -545,7 +545,7 @@
     {
       "file": "DSHKit/Sources/DSHKit/Store/StressScenario.swift",
       "layer": "pure-logic",
-      "lines": 63,
+      "lines": 92,
       "types": [
         "StressScenario"
       ],
@@ -1412,7 +1412,7 @@
     {
       "file": "DSHPocket/Session/ConnectionModel+Demo.swift",
       "layer": "app",
-      "lines": 486,
+      "lines": 551,
       "types": [],
       "imports": [
         "AVFoundation",
@@ -2260,7 +2260,7 @@
     {
       "file": "DSHPocket/Views/MarkdownBody.swift",
       "layer": "app",
-      "lines": 78,
+      "lines": 119,
       "types": [
         "MarkdownBody",
         "PhoneTableStyle"

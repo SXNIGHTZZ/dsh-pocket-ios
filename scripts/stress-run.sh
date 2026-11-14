@@ -61,7 +61,7 @@ for _ in 1 2 3 4; do
   STABLE=$(sample_rss)
   sleep 2
 done
-echo "进会话后:   ${STABLE} MB  (稳定值)"
+echo "进会话后:   ${STABLE} MB  (稳定值) · CPU $(sample_cpu)%"
 
 # 6) sessions 场景只看列表页，不做滚动
 case "$SCENARIO" in

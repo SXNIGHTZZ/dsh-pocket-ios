@@ -15,8 +15,20 @@ public enum StressScenario: Equatable, Sendable {
     case steps(Int)
     /// N 个演示会话（测列表规模与分组计算）。
     case sessions(Int)
-    /// 极端 Markdown：超宽表格 + 超长代码块。
+    /// 极端 Markdown：超宽表格 + 超长代码块（复合场景）。
     case markdownExtreme
+    /// 只有表格：N 行、8 列。用来单独定位表格的布局成本。
+    case markdownTable(Int)
+    /// 只有代码块：N 行。用来单独定位代码块的渲染成本。
+    case markdownCode(Int)
+    /// 纯长文本：N 个段落。用来区分「文字本身」与「结构（表格/代码）」的成本。
+    case markdownText(Int)
+    /// 无语言代码块：N 行，``` 不带语言标识。用来验证「语法高亮」是不是崩溃主因
+    /// （对比 markdownCode：` ```swift ` 会走高亮）。
+    case markdownCodePlain(Int)
+    /// 单段落超长文本：N 行**无空行**。用来验证「单个 Text 长度」是不是崩溃主因
+    /// （对比 markdownText：N 个独立短段落不会崩）。
+    case markdownSingleLine(Int)
 
     /// 单场景的数量上限。防止传错（比如 999999）把模拟器直接撑爆，
     /// 压测是要定位问题，不是制造 OOM 崩溃。
@@ -32,6 +44,22 @@ public enum StressScenario: Equatable, Sendable {
             guard !token.isEmpty else { continue }
             if token == "markdown:extreme" {
                 result.append(.markdownExtreme)
+                continue
+            }
+            // markdown:table:100 / markdown:code:500 / markdown:text:200
+            if token.hasPrefix("markdown:") {
+                let parts = token.split(separator: ":", maxSplits: 2).map(String.init)
+                guard parts.count == 3, let value = Int(parts[2]) else { continue }
+                let count = min(max(value, 0), maxCount)
+                guard count > 0 else { continue }
+                switch parts[1] {
+                case "table": result.append(.markdownTable(count))
+                case "code": result.append(.markdownCode(count))
+                case "codeplain": result.append(.markdownCodePlain(count))
+                case "text": result.append(.markdownText(count))
+                case "singleline": result.append(.markdownSingleLine(count))
+                default: continue
+                }
                 continue
             }
             let parts = token.split(separator: ":", maxSplits: 1).map(String.init)
@@ -55,7 +83,8 @@ public enum StressScenario: Equatable, Sendable {
         case .messages(let n): return n
         case .images(let n): return n
         case .steps(let n): return n
-        case .markdownExtreme: return 1
+        case .markdownExtreme, .markdownTable, .markdownCode, .markdownText,
+             .markdownSingleLine, .markdownCodePlain: return 1
         case .sessions: return 0
         }
     }

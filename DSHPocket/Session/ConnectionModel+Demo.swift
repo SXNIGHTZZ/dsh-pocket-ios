@@ -420,6 +420,21 @@ extension ConnectionModel {
             case .markdownExtreme:
                 append(user: "给我一张大表和一段长代码。",
                        assistant: Self.extremeMarkdown(), image: false)
+            case .markdownTable(let rows):
+                append(user: "给我一张 \(rows) 行的表。",
+                       assistant: Self.tableMarkdown(rows: rows), image: false)
+            case .markdownCodePlain(let lines):
+                append(user: "给我一段 \(lines) 行的代码，不要语言标识。",
+                       assistant: Self.codePlainMarkdown(lines: lines), image: false)
+            case .markdownCode(let lines):
+                append(user: "给我一段 \(lines) 行的代码。",
+                       assistant: Self.codeMarkdown(lines: lines), image: false)
+            case .markdownText(let paragraphs):
+                append(user: "写 \(paragraphs) 段长文字。",
+                       assistant: Self.textMarkdown(paragraphs: paragraphs), image: false)
+            case .markdownSingleLine(let lines):
+                append(user: "写 \(lines) 行、中间不空行的长文本。",
+                       assistant: Self.singleLineMarkdown(lines: lines), image: false)
             case .sessions:
                 // 会话规模在列表层生成，不产出消息。
                 break
@@ -457,6 +472,56 @@ extension ConnectionModel {
 
         如果要把这组数据导成表格，告诉我，我可以直接生成 CSV。
         """
+    }
+
+    /// 只有表格：N 行 × 8 列。
+    private static func tableMarkdown(rows: Int) -> String {
+        var table = "| 列一 | 列二 | 列三 | 列四 | 列五 | 列六 | 列七 | 列八 |\n"
+        table += "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        for row in 0..<rows {
+            table += "| 值 \(row) | 说明 \(row) | 12345 | 中文内容 \(row) | abc | δ | 0.5 | 完成 |\n"
+        }
+        return "### 表格压测 \(rows) 行\n\n" + table
+    }
+
+    /// 单段落超长文本：N 行，**中间没有空行**，整块就是一个段落。
+    /// 用来验证「单个 Text 的长度」是不是崩溃主因。
+    private static func singleLineMarkdown(lines: Int) -> String {
+        var text = "### 单段落压测 \(lines) 行\n\n"
+        for index in 0..<lines {
+            text += "第 \(index + 1) 行内容，继续补充一些中文让每行有实际宽度。\n"
+        }
+        return text
+    }
+
+    /// 无语言代码块：N 行，``` 不带语言标识（不走语法高亮）。
+    private static func codePlainMarkdown(lines: Int) -> String {
+        var code = "```\n"
+        for line in 0..<lines {
+            code += "let value\(line) = compute(\(line))\n"
+        }
+        code += "```\n"
+        return "### 无高亮代码压测 \(lines) 行\n\n" + code
+    }
+
+    /// 只有代码块：N 行。
+    private static func codeMarkdown(lines: Int) -> String {
+        var code = "```swift\n"
+        for line in 0..<lines {
+            code += "let value\(line) = compute(\(line))\n"
+        }
+        code += "```\n"
+        return "### 代码压测 \(lines) 行\n\n" + code
+    }
+
+    /// 只有纯文本：N 个段落，每段约 120 字。
+    private static func textMarkdown(paragraphs: Int) -> String {
+        let sentence = "整体结论是没有严重异常，两项需要留意。指标 B 连续三轮略高，建议下周复测；指标 C 波动较大但仍在区间内。"
+        var text = "### 文本压测 \(paragraphs) 段\n\n"
+        for index in 0..<paragraphs {
+            text += "第 \(index + 1) 段：" + sentence + "\n\n"
+        }
+        return text
     }
 
     /// 极端 Markdown：超宽表格 + 超长代码块，用来压 Textual 的解析与布局。
