@@ -48,4 +48,27 @@ public struct RPCRequest {
         guard let value = result["value"] as? [String: Any] else { throw DSHError.invalidPayload }
         return value
     }
+
+    /// 只判断成功与否，**不要求** `result.value` 是字典。
+    ///
+    /// 有些接口（如 `userQuestions/answer`）只关心「答没答上」，返回体里
+    /// `value` 可能是 null / 数组 / 整个字段缺失。用 `value(from:)` 会抛
+    /// `invalidPayload`，界面就显示「服务器响应格式无效」——但服务端其实已经成功了。
+    /// 这类「命令式」接口应该用这个宽松版。
+    public static func ok(from data: Data) throws {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw DSHError.invalidPayload
+        }
+        if let error = object["error"] as? [String: Any] {
+            let message = error["message"] as? String
+            throw DSHError.server(status: (error["status"] as? NSNumber)?.intValue ?? 0, message: message)
+        }
+        guard let result = object["result"] as? [String: Any] else { throw DSHError.invalidPayload }
+        if (result["ok"] as? Bool) == false {
+            let detail = result["error"] as? [String: Any]
+            let message = detail?["message"] as? String
+            let status = (detail?["status"] as? NSNumber)?.intValue ?? 0
+            throw DSHError.server(status: status, message: message)
+        }
+    }
 }

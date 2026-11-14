@@ -98,6 +98,25 @@ public final class DSHClient: @unchecked Sendable {
         return try RPCRequest.value(from: data)
     }
 
+    /// 命令式 RPC：只确认服务端接受了，**不解析返回体**。
+    ///
+    /// 用于 `userQuestions/answer` 这类「做完就行」的接口——它们的 `value`
+    /// 可能是 null 或非字典，用 `rpc()` 会误报「服务器响应格式无效」。
+    public func rpcVoid(method: String, args: [String: Any],
+                        timeout: TimeInterval = 20) async throws {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/\(method)"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = timeout
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try RPCRequest(method: method, args: args).encoded()
+        let (data, http) = try await self.http.data(for: urlRequest)
+        if let error = DSHError.from(status: http.statusCode,
+                                     message: String(data: data, encoding: .utf8)) {
+            throw error
+        }
+        try RPCRequest.ok(from: data)
+    }
+
     public func sessions(excludeArchived: Bool = true) async throws -> [DSHSession] {
         let value = try await rpc(method: "session/list", args: ["_request": ["excludeArchived": excludeArchived]])
         let items = value["items"] as? [[String: Any]] ?? []

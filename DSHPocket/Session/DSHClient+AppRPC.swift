@@ -22,6 +22,16 @@ extension DSHClient {
         }
     }
 
+    /// 命令式适配版：只确认成功，不解析 value。
+    func rpcVoidAdapted(_ endpoint: String, args: [String: Any],
+                        timeout: TimeInterval = 20) async throws {
+        do {
+            try await rpcVoid(method: endpoint, args: args, timeout: timeout)
+        } catch let error as DSHError {
+            throw ConnectionError.from(error, address: baseURL.absoluteString)
+        }
+    }
+
     /// 带重试的适配版：同一 rpcId 贯穿重试，仅瞬时错误重试（策略在 DSHKit）。
     func rpcWithRetryAdapted(_ endpoint: String, args: [String: Any],
                              attempts: Int = 3,

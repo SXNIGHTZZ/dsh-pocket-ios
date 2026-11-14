@@ -78,7 +78,10 @@ final class QuestionInbox {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                _ = try await providers.client().rpcAdapted("userQuestions/answer", args: args)
+                // 用 rpcVoidAdapted 而不是 rpcAdapted：这个接口只关心「答没答上」，
+                // 返回体的 value 可能是 null/非字典，用严格解析会误报
+                // 「服务器响应格式无效」（真机踩过，其实电脑端已经收到了）。
+                try await providers.client().rpcVoidAdapted("userQuestions/answer", args: args)
                 self.noteSettled(callId: request.callId)
                 providers.record("已回答用户问题：\(request.callId)")
             } catch {
