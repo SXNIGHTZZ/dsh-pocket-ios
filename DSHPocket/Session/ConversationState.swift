@@ -53,6 +53,13 @@ final class ConversationState {
     var lastOpenedAt = Date()
     /// 历史分页：是否还有更早消息、是否正在加载、加载前的滚动锚点。
     var hasMoreOlder = false
+    /// 分页诊断：上滑触发了几次、成功了几次、最后一次拿到多少条。
+    /// 用来区分「上滑没触发」「触发了但服务端没回」「回了但没合并」三种情况。
+    var olderLoadAttempts = 0
+    var olderLoadSuccesses = 0
+    var olderLoadLastAdded = 0
+    var olderLoadLastAt: Date?
+    var olderLoadLastResult: String?
     var isLoadingOlder = false
     /// 打开会话后是否收到过实时 turn/start、turn/end（用于区分历史快照与实时状态）。
     var liveTurnEventsSeen = false

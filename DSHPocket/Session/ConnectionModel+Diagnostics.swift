@@ -76,6 +76,22 @@ extension ConnectionModel {
             ("Flushing", outbox.flushInFlight ? "yes" : "no")
         ]))
 
+        // 分页信号：区分「上滑没触发」「触发了但服务端没回」「回了但没合并」。
+        // 用户反馈「上滑加载不出历史」时，看这一段就能定位卡在哪一步。
+        if let conversation = activeConversation {
+            var rows: [(String, String)] = [
+                ("Has more", hasMoreOlder ? "yes" : "no"),
+                ("Loading older", isLoadingOlder ? "yes" : "no"),
+                ("Attempts", "\(conversation.olderLoadAttempts) (success \(conversation.olderLoadSuccesses))")
+            ]
+            if let result = conversation.olderLoadLastResult {
+                let ago = conversation.olderLoadLastAt.map { "\(Int(Date().timeIntervalSince($0)))s ago" } ?? "—"
+                rows.append(("Last load", "\(result) · \(ago)"))
+            }
+            rows.append(("Messages now", "\(conversation.messages.count)"))
+            sections.append(.init("Pagination", rows))
+        }
+
         // 实时帧信号：卡顿时用来区分「没收到帧」和「收到帧但渲染慢」。
         // 前者是网络/服务端问题，后者是客户端渲染问题——过去只能靠猜。
         if let conversation = activeConversation {

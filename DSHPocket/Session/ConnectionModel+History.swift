@@ -290,10 +290,10 @@ extension ConnectionModel {
         if let conversation = activeConversation {
             conversation.turnFailures = conversation.turnFailures.filter { $0.sequence >= oldestKept }
         }
-        // 只有裁到「退出后的保留量」才关掉「还有更早」；会话内裁剪仍应允许继续上滑加载。
-        if limit == Self.retainedMessageLimit {
-            hasMoreOlder = false
-        }
-        recordDiagnostic("消息裁剪：丢弃 \(removed) 条，保留 \(remaining.count) 条（limit=\(limit)）")
+        // **不要**在这里动 `hasMoreOlder`。
+        // 本地裁剪只是「把旧消息从内存卸载」，不代表服务端没有更早的历史。
+        // 之前错误地在这里关了它，结果：裁到 24 条后上滑永远不再请求，历史彻底看不到。
+        // 这个开关只该由服务端的 `hasMore` 决定（见 applyCoordinatorUpdate 的 .hasMore 分支）。
+        recordDiagnostic("消息裁剪：丢弃 \(removed) 条，保留 \(remaining.count) 条（limit=\(limit)，hasMore 保持 \(hasMoreOlder)）")
     }
 }

@@ -157,7 +157,12 @@ extension ConnectionModel {
               let oldest = messages.min(by: { $0.sequence < $1.sequence }) else { return }
         isLoadingOlder = true
         olderAnchorID = oldest.id
-        recordDiagnostic("请求更早历史：beforeSeq=\(oldest.sequence)")
+        if let conversation = activeConversation {
+            conversation.olderLoadAttempts += 1
+            conversation.olderLoadLastAt = Date()
+            conversation.olderLoadLastResult = "requesting"
+        }
+        recordDiagnostic("请求更早历史：beforeSeq=\(oldest.sequence) hasMore=\(hasMoreOlder) total=\(messages.count)")
         Task { await coordinator.loadOlder() }
     }
 
@@ -179,11 +184,18 @@ extension ConnectionModel {
             isLoadingConversation = false
             noteLoadFinished(source: "snapshot", conversation: conversation)
         case .messages(let dshMessages):
+            let beforeCount = messages.count
             mergeMessages(dshMessages.map(Self.pocketMessage(from:)))
             isLoadingConversation = false
             if isLoadingOlder {
                 isLoadingOlder = false
                 olderLoadTick += 1
+                if let conversation = activeConversation {
+                    conversation.olderLoadSuccesses += 1
+                    conversation.olderLoadLastAdded = max(0, messages.count - beforeCount)
+                    conversation.olderLoadLastAt = Date()
+                    conversation.olderLoadLastResult = "ok +\(conversation.olderLoadLastAdded)"
+                }
             }
         case .hasMore(let more):
             hasMoreOlder = more
