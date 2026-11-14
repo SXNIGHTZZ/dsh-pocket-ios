@@ -99,8 +99,9 @@ final class ConversationState {
     /// 裁剪到最近 N 条消息（含步骤与失败记录）。
     ///
     /// 调用时机由外部策略决定：
-    /// - 会话**仍在看时**用 `inSessionMessageLimit`（允许上滑翻历史，但不无限涨）
-    /// - 会话**被切走/退出时**用 `retainedMessageLimit`（卸载旧历史，省内存）
+    /// - **退出/重进**时用 `retainedMessageLimit`（卸载旧历史，省内存）
+    /// - 演示模式（压测数据）用 `inSessionMessageLimit` 防 OOM
+    /// - **真实会话内不裁**：用户上滑看历史必须能一直往回翻
     @MainActor
     func trimMessages(to limit: Int) {
         guard messages.count > limit else { return }

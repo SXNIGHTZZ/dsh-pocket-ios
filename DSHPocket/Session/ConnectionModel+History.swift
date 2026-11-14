@@ -245,9 +245,9 @@ extension ConnectionModel {
             return true
         }
         messages = (Array(bySequence.values) + pending).sorted { $0.sequence < $1.sequence }
-        // 会话内允许上滑翻历史，所以不按「退出后保留量」裁；
-        // 但仍有会话内上限，避免 400 轮那种情况把内存吃到 1.5 GB。
-        trimToInSessionLimit()
+        // 会话内**不裁**：用户上滑看历史时必须能一直往回翻。
+        // 之前加过 50 条上限，结果上滑加载的更早消息被立刻裁掉（诊断显示 ok +0），
+        // 表现为「翻不出去」。内存压力改由退出时裁剪解决（见 open()）。
         restoreMissingOutboxMessages()
         pruneStaleOutbox()
         timingLog("model_update incoming=\(incoming.count) total=\(messages.count)")
@@ -260,12 +260,6 @@ extension ConnectionModel {
     @MainActor
     func trimToRetentionLimit() {
         trimMessages(to: Self.retainedMessageLimit)
-    }
-
-    /// 会话内上限：允许翻历史，但不让消息无限累积（超了会 OOM）。
-    @MainActor
-    func trimToInSessionLimit() {
-        trimMessages(to: Self.inSessionMessageLimit)
     }
 
     @MainActor

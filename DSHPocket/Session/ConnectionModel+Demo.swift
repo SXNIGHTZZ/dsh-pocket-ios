@@ -64,8 +64,9 @@ extension ConnectionModel {
         sessionStore.selected = session
         messages = Self.demoMessages(for: session.sessionId)
         steps = Self.demoSteps(for: session.sessionId)
-        // 会话内上限：允许翻历史，但不让压测数据把内存吃爆（退出时另按 24 裁）。
-        trimToInSessionLimit()
+        // 演示模式仍设上限：压测数据（DSH_STRESS=messages:400）会造 800 条，
+        // 不裁会直接吃 1.5 GB。真实连接不走这里，用户路径不受影响。
+        conversation.trimMessages(to: Self.inSessionMessageLimit)
         isTurnRunning = session.running
         turnStartedAt = session.running ? Date().addingTimeInterval(-37) : nil
         isLoadingConversation = false
