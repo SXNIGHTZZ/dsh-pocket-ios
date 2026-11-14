@@ -50,7 +50,13 @@ final class ConnectionModel {
     var lastWorkspaceLoadError: String?
 
     /// 只同步最近的消息：公网隧道对 WebSocket 单帧大小有限制，长会话全量同步会被拒。
-    static let conversationMessageLimit = 30
+    static let conversationMessageLimit = 24
+    /// 内存里保留的消息总数硬上限（约 12 轮：用户一句 + 助手一段）。
+    ///
+    /// 为什么必须硬裁：SwiftUI 的 `LazyVStack` 只延迟**创建**、不回收**已创建**的视图。
+    /// 压测实测 400 条消息滚动一遍，内存从 399 MB 涨到 1.4 GB（会被系统 OOM 杀掉）。
+    /// 用户明确「历史基本不看」，所以数据层直接裁掉最旧的，不让它进视图树。
+    static let retainedMessageLimit = 24
     /// 连接配置与状态机（spec/12 第三个对象）。
     /// 字段用计算属性转发，约 140 处调用点暂不改；视图收敛留到批次 3。
     let connection = ConnectionState(

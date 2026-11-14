@@ -232,8 +232,41 @@ extension ConnectionModel {
             return true
         }
         messages = (Array(bySequence.values) + pending).sorted { $0.sequence < $1.sequence }
+        trimToRetentionLimit()
         restoreMissingOutboxMessages()
         pruneStaleOutbox()
         timingLog("model_update incoming=\(incoming.count) total=\(messages.count)")
+    }
+
+    /// 把消息裁到「最近 N 条」。
+    ///
+    /// 优先丢最旧的已确认消息，pending（正在发送的）一律保留。
+    /// 裁掉消息后，属于它们的步骤和失败记录也一起裁，避免这些行仍然被渲染。
+    @MainActor
+    func trimToRetentionLimit() {
+        let limit = Self.retainedMessageLimit
+        guard messages.count > limit else { return }
+        var remaining = messages
+        var removed = 0
+        var index = 0
+        let target = messages.count - limit
+        while removed < target, index < remaining.count {
+            if remaining[index].isPending {
+                index += 1
+            } else {
+                remaining.remove(at: index)
+                removed += 1
+            }
+        }
+        guard removed > 0 else { return }
+        messages = remaining
+        let oldestKept = remaining.first?.sequence ?? Int.max
+        steps = steps.filter { $0.sequence >= oldestKept }
+        if let conversation = activeConversation {
+            conversation.turnFailures = conversation.turnFailures.filter { $0.sequence >= oldestKept }
+        }
+        // 裁到这个程度后再往上翻也没有意义（拉了还会被裁），直接把「还有更早」关掉。
+        hasMoreOlder = false
+        recordDiagnostic("消息裁剪：丢弃 \(removed) 条，保留 \(remaining.count) 条")
     }
 }

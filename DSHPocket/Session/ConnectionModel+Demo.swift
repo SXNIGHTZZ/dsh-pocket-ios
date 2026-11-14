@@ -64,6 +64,9 @@ extension ConnectionModel {
         sessionStore.selected = session
         messages = Self.demoMessages(for: session.sessionId)
         steps = Self.demoSteps(for: session.sessionId)
+        // 真实连接走 mergeMessages 里的裁剪；演示模式是直接赋值，这里要单独裁一次，
+        // 否则压测数据（DSH_STRESS）会把全部消息塞进视图。
+        trimToRetentionLimit()
         isTurnRunning = session.running
         turnStartedAt = session.running ? Date().addingTimeInterval(-37) : nil
         isLoadingConversation = false
@@ -143,6 +146,7 @@ extension ConnectionModel {
     static func demoMessages(for sessionId: String) -> [PocketMessage] {
 #if DEBUG
         if DebugLaunch.storeShots { return storeShotMessages(for: sessionId) }
+        if DebugLaunch.stressRounds > 0 { return stressMessages(rounds: DebugLaunch.stressRounds) }
 #endif
         if LanguageStore.shared.isEnglish { return demoMessagesEN(for: sessionId) }
         switch sessionId {
@@ -362,4 +366,50 @@ extension ConnectionModel {
             ]
         }
     }
+
+#if DEBUG
+    /// 压测数据：N 轮「用户提问 + 助手 Markdown 回复」，混入表格/代码块/列表与图片。
+    ///
+    /// 目的是在模拟器上复现长会话的内存与滚动压力，不需要真机也不需要连电脑。
+    /// 每 10 轮带一张图片，模拟图文混排。
+    static func stressMessages(rounds: Int) -> [PocketMessage] {
+        var result: [PocketMessage] = []
+        var sequence = 0
+        for index in 0..<rounds {
+            sequence += 1
+            result.append(PocketMessage(
+                demoText: "第 \(index + 1) 轮提问：帮我看一下这组数据的趋势，重点说异常项。",
+                isUser: true, sequence: sequence))
+
+            sequence += 1
+            let withImage = index % 10 == 0
+            result.append(PocketMessage(demoText: """
+            ### 第 \(index + 1) 轮分析
+
+            下面按指标拆开说。整体结论是**没有严重异常**，两项需要留意。
+
+            | 指标 | 当前值 | 参考区间 | 判断 |
+            | --- | --- | --- | --- |
+            | 指标 A | \(index * 3 % 97) | 40–80 | 正常 |
+            | 指标 B | \(index * 7 % 53) | 10–45 | 略高 |
+            | 指标 C | \(index * 11 % 31) | 5–25 | 正常 |
+
+            ```swift
+            let sample = \(index)
+            let ratio = Double(sample) / 100.0
+            print(ratio)
+            ```
+
+            **需要留意的两点**
+
+            1. 指标 B 连续三轮略高，建议下周复测
+            2. 指标 C 波动较大，但仍在区间内
+
+            如果要把这组数据导成表格，告诉我，我可以直接生成 CSV。
+            """, isUser: false, sequence: sequence,
+                 localImages: withImage ? [demoPicture] : []))
+        }
+        return result
+    }
+#endif
 }
