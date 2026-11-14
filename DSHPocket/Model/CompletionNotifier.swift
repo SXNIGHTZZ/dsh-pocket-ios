@@ -30,6 +30,9 @@ final class CompletionNotifier: NSObject, UNUserNotificationCenterDelegate {
     var onOpenSession: ((String) -> Void)?
 
     private var configured = false
+    /// 授权请求只发一次。`requestAuthorization` 弹的是系统框，
+    /// 不能在启动时静默弹（用户还没做任何操作就被打断），所以改成「首次真要发通知时才问」。
+    private var didRequestPermission = false
 
     func configure() {
         guard !configured else { return }
@@ -54,11 +57,20 @@ final class CompletionNotifier: NSObject, UNUserNotificationCenterDelegate {
         center.setNotificationCategories([category])
     }
 
+    /// 请求通知授权（幂等）。
+    ///
+    /// **不要**在 App 启动时调用：`ConnectionModel.init` 里原本无条件调它，
+    /// 结果每次冷启动都会加载 UserNotifications 并弹系统授权框——用户还没做任何操作。
+    /// 现在改成由「首次真正需要发通知」触发（见 `notify`）或用户主动开启开关时触发。
     func requestPermission() {
+        guard !didRequestPermission else { return }
+        didRequestPermission = true
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
     func notify(sessionId: String, title: String) {
+        // 首次要发通知时才问授权：这时候用户已经用起来了，弹框有上下文。
+        requestPermission()
         let content = UNMutableNotificationContent()
         content.title = "对话已完成"
         content.body = title.isEmpty ? "等待你的回复" : "「\(title)」等待你的回复"

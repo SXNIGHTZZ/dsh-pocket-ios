@@ -203,6 +203,9 @@ extension ConnectionModel {
         if visibleSessionId == session.sessionId {
             visibleSessionId = nil
         }
+        // 裁剪不在这里做：`leave()` 由 ConversationView.onDisappear 调，
+        // 而 NavigationStack 返回时该回调实测不触发。裁剪改到 `open()` 里
+        // （进入会话的必经之路，详见 ConnectionModel+History.open）。
         recordDiagnostic("离开会话：\(session.displayTitle) 内存 \(String(format: "%.1f", Diagnostics.memoryFootprintMB())) MB 会话页 \(ConversationViewLifetime.liveCount)")
     }
 

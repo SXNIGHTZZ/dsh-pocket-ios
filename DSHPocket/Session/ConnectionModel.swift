@@ -57,6 +57,12 @@ final class ConnectionModel {
     /// 压测实测 400 条消息滚动一遍，内存从 399 MB 涨到 1.4 GB（会被系统 OOM 杀掉）。
     /// 用户明确「历史基本不看」，所以数据层直接裁掉最旧的，不让它进视图树。
     static let retainedMessageLimit = 24
+    /// 会话内保留上限（约 50 轮）。
+    ///
+    /// 用户预期是「本次对话里可以一直往上翻」，所以会话内**不按 24 裁**；
+    /// 但也不能无限——压测 400 轮实测吃到 1554 MB，会被系统 OOM 杀掉。
+    /// 100 条足够正常用户翻，超出部分仍按最旧优先卸载。
+    static let inSessionMessageLimit = 100
     /// 连接配置与状态机（spec/12 第三个对象）。
     /// 字段用计算属性转发，约 140 处调用点暂不改；视图收敛留到批次 3。
     let connection = ConnectionState(
@@ -291,10 +297,9 @@ final class ConnectionModel {
         CompletionNotifier.shared.onOpenSession = { [weak self] sessionId in
             Task { @MainActor in await self?.openSessionFromNotification(sessionId: sessionId) }
         }
-        if completionAlertsEnabled,
-           ProcessInfo.processInfo.environment["DSH_NO_NOTIF_PROMPT"] != "1" {
-            CompletionNotifier.shared.requestPermission()
-        }
+        // 不在这里请求通知授权：启动时弹系统框会打断用户，且会提前加载 UserNotifications。
+        // 授权请求改到「首次真要发通知」（CompletionNotifier.notify）或用户主动开关时。
+        DiagFileLog.log("model-init footprint=\(Int(Diagnostics.memoryFootprintMB()))MB")
     }
 
 #if DEBUG

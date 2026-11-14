@@ -24,6 +24,19 @@ extension ConnectionModel {
     @MainActor
     /// 进入会话：只切状态、让界面立刻有内容；订阅与维护工作交给 startBackgroundFeeds。
     func open(_ session: PocketSession) {
+        // 进入任何会话（包括退出后重进同一个）都先把「上一个活跃会话」的旧历史卸载。
+        //
+        // 为什么放在这里而不是 ConversationView.onDisappear：
+        // NavigationStack 返回时视图的 onDisappear 实测不触发，`leave()` 也就不会跑——
+        // 结果是内存看着降了（视图销毁），messages 数组其实还留着，重进又全量回来。
+        // `open()` 是进入会话的唯一必经之路，必定执行。
+        if let previous = activeConversation {
+            let before = previous.messages.count
+            previous.trimMessages(to: Self.retainedMessageLimit)
+            if before != previous.messages.count {
+                DiagFileLog.log("open-trim-previous \(before) -> \(previous.messages.count)")
+            }
+        }
         if isDemoMode { openDemo(session); return }
         if sessionStore.selected?.sessionId == session.sessionId,
            activeConversation?.coordinatorStarted == true { return }
@@ -232,7 +245,9 @@ extension ConnectionModel {
             return true
         }
         messages = (Array(bySequence.values) + pending).sorted { $0.sequence < $1.sequence }
-        trimToRetentionLimit()
+        // 会话内允许上滑翻历史，所以不按「退出后保留量」裁；
+        // 但仍有会话内上限，避免 400 轮那种情况把内存吃到 1.5 GB。
+        trimToInSessionLimit()
         restoreMissingOutboxMessages()
         pruneStaleOutbox()
         timingLog("model_update incoming=\(incoming.count) total=\(messages.count)")
@@ -244,7 +259,17 @@ extension ConnectionModel {
     /// 裁掉消息后，属于它们的步骤和失败记录也一起裁，避免这些行仍然被渲染。
     @MainActor
     func trimToRetentionLimit() {
-        let limit = Self.retainedMessageLimit
+        trimMessages(to: Self.retainedMessageLimit)
+    }
+
+    /// 会话内上限：允许翻历史，但不让消息无限累积（超了会 OOM）。
+    @MainActor
+    func trimToInSessionLimit() {
+        trimMessages(to: Self.inSessionMessageLimit)
+    }
+
+    @MainActor
+    private func trimMessages(to limit: Int) {
         guard messages.count > limit else { return }
         var remaining = messages
         var removed = 0
@@ -265,8 +290,10 @@ extension ConnectionModel {
         if let conversation = activeConversation {
             conversation.turnFailures = conversation.turnFailures.filter { $0.sequence >= oldestKept }
         }
-        // 裁到这个程度后再往上翻也没有意义（拉了还会被裁），直接把「还有更早」关掉。
-        hasMoreOlder = false
-        recordDiagnostic("消息裁剪：丢弃 \(removed) 条，保留 \(remaining.count) 条")
+        // 只有裁到「退出后的保留量」才关掉「还有更早」；会话内裁剪仍应允许继续上滑加载。
+        if limit == Self.retainedMessageLimit {
+            hasMoreOlder = false
+        }
+        recordDiagnostic("消息裁剪：丢弃 \(removed) 条，保留 \(remaining.count) 条（limit=\(limit)）")
     }
 }

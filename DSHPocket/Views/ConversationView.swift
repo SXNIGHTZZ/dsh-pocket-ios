@@ -487,6 +487,8 @@ struct ConversationView: View {
         .onDisappear {
             composerFocused = false
             TextSelectionDismisser.clear()
+            // 退出裁剪不在视图层做（onDisappear 在 NavigationStack 返回时不触发），
+            // 统一放在 model.leave(session) 里。
         }
         .onChange(of: photoItems) { _, items in
             guard !items.isEmpty else { return }

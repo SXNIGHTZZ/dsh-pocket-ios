@@ -64,9 +64,8 @@ extension ConnectionModel {
         sessionStore.selected = session
         messages = Self.demoMessages(for: session.sessionId)
         steps = Self.demoSteps(for: session.sessionId)
-        // 真实连接走 mergeMessages 里的裁剪；演示模式是直接赋值，这里要单独裁一次，
-        // 否则压测数据（DSH_STRESS）会把全部消息塞进视图。
-        trimToRetentionLimit()
+        // 会话内上限：允许翻历史，但不让压测数据把内存吃爆（退出时另按 24 裁）。
+        trimToInSessionLimit()
         isTurnRunning = session.running
         turnStartedAt = session.running ? Date().addingTimeInterval(-37) : nil
         isLoadingConversation = false

@@ -88,4 +88,31 @@ final class ConversationState {
         self.sessionId = sessionId
         self.draft = DraftStore.draft(for: sessionId)
     }
+
+    /// 裁剪到最近 N 条消息（含步骤与失败记录）。
+    ///
+    /// 调用时机由外部策略决定：
+    /// - 会话**仍在看时**用 `inSessionMessageLimit`（允许上滑翻历史，但不无限涨）
+    /// - 会话**被切走/退出时**用 `retainedMessageLimit`（卸载旧历史，省内存）
+    @MainActor
+    func trimMessages(to limit: Int) {
+        guard messages.count > limit else { return }
+        var remaining = messages
+        var removed = 0
+        var index = 0
+        let target = messages.count - limit
+        while removed < target, index < remaining.count {
+            if remaining[index].isPending {
+                index += 1
+            } else {
+                remaining.remove(at: index)
+                removed += 1
+            }
+        }
+        guard removed > 0 else { return }
+        messages = remaining
+        let oldestKept = remaining.first?.sequence ?? Int.max
+        steps = steps.filter { $0.sequence >= oldestKept }
+        turnFailures = turnFailures.filter { $0.sequence >= oldestKept }
+    }
 }

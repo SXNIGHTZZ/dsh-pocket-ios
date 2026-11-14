@@ -49,6 +49,8 @@ struct RootView: View {
                 model.installSessionAPIProviders()
                 model.installNetworkWatcher()
                 startRestoreWatchdog()
+                // 界面刚出现时的内存（此时还是 LaunchPlaceholder，没有真实页面）
+                DiagFileLog.log("root-appear footprint=\(Int(Diagnostics.memoryFootprintMB()))MB")
             }
             .onChange(of: reduceMotion) { _, value in PocketMotion.reduceMotion = value }
             .toolbar {
@@ -66,7 +68,12 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .appLanguageChanged)) { _ in
             languageRevision &+= 1
         }
-        .task { await model.restoreConnection() }
+
+        .task {
+            await model.restoreConnection()
+            // 恢复完成后再打一次：这是「停在连接页」或「停在会话列表」的稳定态
+            DiagFileLog.log("restore-done footprint=\(Int(Diagnostics.memoryFootprintMB()))MB connected=\(model.connection.isConnected)")
+        }
         .onAppear {
 #if DEBUG
             if DebugLaunch.showSettings { showingAppSettings = true }
