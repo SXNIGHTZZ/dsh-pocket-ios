@@ -207,7 +207,7 @@ window.__ModuleLoader__.load({
             makeT(currentLang())("　需海外 App Store 安装 Tailscale，免费；两端登录同一账号，长期更稳（推荐）", "　Install Tailscale from an overseas App Store (free); same account on both ends — most stable (recommended)")),
           React.createElement("div", null,
             React.createElement("b", null, "EasyTier"),
-            makeT(currentLang())("　需海外 App Store 安装 App（约 $0.99）+ 自行配置", "　Install the app from an overseas App Store (~$0.99) + manual setup"))),
+            makeT(currentLang())("　电脑跑 EasyTier 组网，手机端用 WireGuard 接入（需自行安装配置）", "　EasyTier on the computer; the phone joins via WireGuard (manual setup)"))),
         // 连接方式三选一（小圆点），二维码始终对应当前选中的方式
         React.createElement("div", { style: { display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: 6 } },
           modes.map(function (m) {
@@ -261,6 +261,21 @@ window.__ModuleLoader__.load({
               }),
               React.createElement("button", { type: "button", disabled: busy, onClick: function () { savePin(customPin); }, style: chipPrimary }, makeT(currentLang())("保存", "Save")),
               React.createElement("span", { style: { fontSize: 11, opacity: 0.55 } }, makeT(currentLang())("保存后旧密码失效", "Old PIN stops working after saving"))) : null,
+            // EasyTier：还没建 WireGuard 门户时，把该跑的命令直接摊出来（可复制）
+            status && status.state === "needs-setup" && status.command
+              ? React.createElement("div", { style: { marginTop: 10 } },
+                  React.createElement("div", { style: { fontSize: 11, opacity: 0.65, lineHeight: 1.5, marginBottom: 6 } },
+                    makeT(currentLang())("在电脑终端执行（需要 sudo，会创建虚拟网卡）：", "Run this in a terminal on your computer (needs sudo — it creates a virtual network interface):")),
+                  React.createElement("pre", { style: { fontSize: 11, lineHeight: 1.5, background: "rgba(0,0,0,.04)", border: "1px solid rgba(0,0,0,.08)", borderRadius: 6, padding: 8, overflowX: "auto", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" } },
+                    status.command),
+                  React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 6 } },
+                    React.createElement("button", { type: "button", onClick: function () { copy(status.command, "cmd"); }, style: chipStyle }, copied === "cmd" ? makeT(currentLang())("已复制", "Copied") : makeT(currentLang())("复制命令", "Copy command")),
+                    React.createElement("button", { type: "button", onClick: refreshStatus, style: chipStyle }, makeT(currentLang())("已执行，刷新", "Done, refresh"))))
+              : null,
+            // EasyTier：门户就绪后提示手机端用 WireGuard 导入
+            status && status.hint
+              ? React.createElement("div", { style: { fontSize: 11, color: "#147A5E", marginTop: 8, lineHeight: 1.5 } }, status.hint)
+              : null,
             actionError ? React.createElement("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 6 } }, actionError) : null,
             (status && status.error) ? React.createElement("div", { style: { fontSize: 11, color: "#b45309", marginTop: 6, lineHeight: 1.5 } }, status.error) : null,
             pairValue.error ? React.createElement("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 6 } }, pairValue.error) : null,

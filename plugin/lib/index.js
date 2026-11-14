@@ -14,6 +14,7 @@ import { promisify } from 'node:util'
 import QRCode from 'qrcode'
 import { CloudflareTunnel, findCloudflared } from './cloudflare.js'
 import { selectLanIPv4, lanEntryUrl } from './lan.js'
+import { findEasytier, readWireGuardPortal, patchEndpoint, coreCommand, randomNetwork } from './easytier.js'
 
 const execFileP = promisify(execFile)
 
@@ -21,6 +22,8 @@ export const name = 'dsh-pocket-ios'
 export const inject = ['connection', 'webServer']
 
 const CHANNEL = '/dsh-pocket-ios'
+/** EasyTier WireGuard 门户端口（easytier 默认 11011）。 */
+const EASYTIER_PORTAL_PORT = 11011
 const TAILSCALE_BIN = '/Applications/Tailscale.app/Contents/MacOS/Tailscale'
 const BODY_MAX = 64 * 1024
 /** 稳定本地入口端口：Tailscale Serve 指向它；默认 3081（与 dsh-pocket 代理端口一致）。 */
@@ -149,6 +152,25 @@ let cloudflareTunnel = null
 /** dsh web 的监听端口，apply() 里赋值；modeStatus 用它起隧道。 */
 let dshWebPortRef = null
 
+/**
+ * EasyTier 的网络名/密钥：首次生成后持久化，保证电脑和手机用同一套。
+ * 换掉它们等于换了网络，手机那边的配置就失效了。
+ */
+async function readOrCreateEasyTierNetwork() {
+  const file = join(LOG_DIR, 'easytier-network.json')
+  try {
+    const raw = await readFile(file, 'utf8')
+    const parsed = JSON.parse(raw)
+    if (parsed?.networkName && parsed?.networkSecret) return parsed
+  } catch { /* 没存过 */ }
+  const created = randomNetwork()
+  try {
+    await mkdir(LOG_DIR, { recursive: true })
+    await writeFile(file, JSON.stringify(created), 'utf8')
+  } catch { /* 存不了不影响本次 */ }
+  return created
+}
+
 function modeFile() {
   return join(LOG_DIR, 'mode.json')
 }
@@ -265,12 +287,54 @@ async function modeStatus() {
   }
 
   if (currentMode === 'easytier') {
+    // EasyTier 是 P2P 组网，不是"给我一个公网 URL"。
+    // 电脑跑 easytier-core 建虚拟网卡（需要 root，插件代不了），
+    // 手机端在 iOS 上根本跑不了 EasyTier —— 官方给的路子是 WireGuard 门户：
+    // 电脑导出 wg 配置，手机用 WireGuard App 导入。
+    const { cli } = await findEasytier()
+    if (!cli) {
+      return {
+        ...base,
+        address: null,
+        qr: null,
+        state: 'error',
+        error: '没找到 easytier-cli。先安装 EasyTier（brew install easytier 或它的官方脚本），再回来刷新。',
+      }
+    }
+
+    const wg = await readWireGuardPortal(cli)
+    if (!wg) {
+      // 还没建好门户：给出该执行的命令 + 随机网络名/密钥
+      const net = await readOrCreateEasyTierNetwork()
+      const cmd = coreCommand({
+        networkName: net.networkName,
+        networkSecret: net.networkSecret,
+        portalPort: EASYTIER_PORTAL_PORT,
+      })
+      return {
+        ...base,
+        address: null,
+        qr: null,
+        state: 'needs-setup',
+        error: '还没建 WireGuard 门户。在电脑终端执行下面的命令（需要 sudo），完成后点刷新。',
+        command: cmd,
+        hint: '手机端请安装 WireGuard（不是 EasyTier）：导入配置后即可访问这台电脑。',
+      }
+    }
+
+    // 有配置：把 Endpoint 换成本机可达地址（easytier 常给 0.0.0.0）
+    const lanIp = selectLanIPv4()
+    const host = lanIp || ''
+    const config = patchEndpoint(wg, host, EASYTIER_PORTAL_PORT)
+    const qr = await QRCode.toDataURL(config, { margin: 1, width: 360 })
     return {
       ...base,
-      address: null,
-      qr: null,
-      state: 'not-supported',
-      error: 'EasyTier 还没接入；先用 Cloudflare（仅局域网可用，无需额外客户端）',
+      address: host ? `wg://${host}:${EASYTIER_PORTAL_PORT}` : null,
+      qr,
+      state: 'ready',
+      error: null,
+      config,
+      hint: '用手机上的 WireGuard App 扫这个码导入，然后启用连接。',
     }
   }
 
