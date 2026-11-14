@@ -663,7 +663,11 @@ export function apply(ctx) {
             const isLoopback = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host)
             base = `${forwardedProto || (isLoopback ? 'http' : 'https')}://${host}`
           }
-          const pairURL = `${base}/?pair=${pairToken}`
+          // **必须走插件自己的 /pair 端点**，不是根路径。
+          // 之前生成的是 `${base}/?pair=`，代理会把它当普通请求转发给 DSH，
+          // DSH 不认识 ?pair 参数 → 返回 401 → App 显示「无法到达电脑」。
+          // 配对逻辑（校验 token、换 cookie）在 `${CHANNEL}/pair` 里（2026-11-15 定位）。
+          const pairURL = `${base}${CHANNEL}/pair?token=${encodeURIComponent(pairToken)}`
           const qr = await QRCode.toDataURL(pairURL, { margin: 1, width: 360 })
           await logLine('pair token created')
           send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value: { url: pairURL, qr, expiresIn: 300 } } })
