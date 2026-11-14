@@ -101,6 +101,8 @@ test('coreCommand：包含所有必需参数', () => {
     peers: 'tcp://public.easytier.cn:11010',
   })
   assert.ok(cmd.startsWith('sudo easytier-core'))
+  // 必须显式给 --ipv4：留空的话只转发不建 TUN，Virtual IP 为空，手机找不到电脑
+  assert.ok(cmd.includes('--ipv4 10.14.14.1'), '缺 --ipv4 会导致电脑在虚拟网络里没有地址')
   assert.ok(cmd.includes('--network-name dsh-abc'))
   assert.ok(cmd.includes('--network-secret sec123'))
   // 格式必须是 wg://<监听>:<端口>/<客户端网段>，只写前半段会被 easytier 拒绝

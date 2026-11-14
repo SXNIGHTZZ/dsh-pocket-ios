@@ -14,7 +14,7 @@ import { promisify } from 'node:util'
 import QRCode from 'qrcode'
 import { CloudflareTunnel, findCloudflared } from './cloudflare.js'
 import { selectLanIPv4, lanEntryUrl } from './lan.js'
-import { findEasytier, readWireGuardPortal, normalizeWireGuardConfig, coreCommand, randomNetwork } from './easytier.js'
+import { findEasytier, readWireGuardPortal, normalizeWireGuardConfig, clientAddressFrom, coreCommand, randomNetwork } from './easytier.js'
 
 const execFileP = promisify(execFile)
 
@@ -331,14 +331,20 @@ async function modeStatus() {
     const host = lanIp || ''
     const config = normalizeWireGuardConfig(wg, host, EASYTIER_PORTAL_PORT)
     const qr = await QRCode.toDataURL(config, { margin: 1, width: 360 })
+
+    // **手机要连的是虚拟网络里的 DSH 入口，不是局域网 IP**。
+    // WireGuard 只负责让手机进 10.14.14.0/24；DSH 本身在 127.0.0.1，
+    // 靠代理的 0.0.0.0:3091 在虚拟网络上暴露出来。
+    // 所以 App 里该填 http://10.14.14.1:3091。
+    const virtualHost = clientAddressFrom(wg).replace(/\.\d+$/, '.1')
     return {
       ...base,
-      address: host ? `wg://${host}:${EASYTIER_PORTAL_PORT}` : null,
+      address: `http://${virtualHost}:${PROXY_PORT}`,
       qr,
       state: 'ready',
       error: null,
       config,
-      hint: '用手机上的 WireGuard App 扫这个码导入，然后启用连接。',
+      hint: `用手机上的 WireGuard 类客户端导入这份配置并启用，然后在 App 里连接 http://${virtualHost}:${PROXY_PORT}`,
     }
   }
 

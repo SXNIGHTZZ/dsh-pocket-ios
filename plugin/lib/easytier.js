@@ -189,8 +189,15 @@ export function coreCommand({ networkName, networkSecret, portalPort, peers = ''
   // 只写 wg://0.0.0.0:11011 会被拒（实测 2.6.4 的 --help 要求带网段）。
   // 也不存在 --vpn-portal-client / --vpn-portal-private-key 这两个参数
   // —— 之前凭印象写过，跑起来直接报未知参数。
+  // **必须给 --ipv4**：官方说明写着 "if empty, this node will only forward
+  // packets and no TUN device will be created"。不给的话电脑在虚拟网络里没有
+  // 地址，`easytier-cli node` 的 Virtual IP 为空，手机连上了也找不到电脑
+  // （2026-11-15 用户实测就是这个现象）。
+  // 取 client_cidr 的 .1，和手机（.2）同段，路由最直接。
+  const serverIp = VPN_CLIENT_SUBNET.replace(/\.0\/.*$/, '.1')
   const parts = [
     'sudo easytier-core',
+    `--ipv4 ${serverIp}`,
     '-d',
     `--network-name ${networkName}`,
     `--network-secret ${networkSecret}`,
