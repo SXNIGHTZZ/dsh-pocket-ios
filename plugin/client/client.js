@@ -67,7 +67,7 @@ window.__ModuleLoader__.load({
       var pairState = React.useState({ loading: true, error: null, data: null });
       var pairValue = pairState[0];
       var setPair = pairState[1];
-      var remainingState = React.useState(0);
+      var remainingState = React.useState(300);
       var remaining = remainingState[0];
       var setRemaining = remainingState[1];
       var statusState = React.useState(null);
@@ -123,7 +123,7 @@ window.__ModuleLoader__.load({
         if (!props.rpcCall) return;
         Promise.resolve(props.rpcCall("pair.create", {})).then(unwrapRpc).then(function (data) {
           setPair({ loading: false, error: null, data: data });
-          setRemaining(data && data.expiresIn ? data.expiresIn : 60);
+          setRemaining(data && data.expiresIn ? data.expiresIn : 300);
         }).catch(function (e) {
           var msg = String((e && e.message) || e);
           if (msg.indexOf("unknown endpoint") >= 0) msg = makeT(currentLang())("配对服务未就绪：请重启 DSH 后再刷新本页。", "Pairing service not ready: restart DSH and refresh this page.");
@@ -137,7 +137,8 @@ window.__ModuleLoader__.load({
         var timer = setInterval(function () {
           setRemaining(function (prev) {
             var next = prev - 1;
-            if (next <= 8) { generatePair(); return 60; }
+            // 剩 30 秒就换新码（原来是 8 秒，但 60 秒的有效期本身就太短）
+            if (next <= 30) { generatePair(); return 300; }
             return next;
           });
         }, 1000);

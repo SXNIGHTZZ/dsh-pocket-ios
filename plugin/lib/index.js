@@ -454,7 +454,9 @@ export function apply(ctx) {
             send(res, 401, { ok: false })
             return
           }
-          pairTokens.delete(String(token))  // 一次性
+          // 不在这里删 token：同一张码可能被点开两次（浏览器预取、用户刷新、
+          // 或在两台设备上先后打开）。过期由 expiresAt 控制，不必靠「用掉即删」。
+          // 删掉的后果是「第二次打开就说过期」，用户完全无法理解。
           const host = String(req.headers.host ?? '')
           if (!host || typeof connection?.authenticatedUrl !== 'function') { send(res, 503, { ok: false }); return }
           const forwardedProto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim()
@@ -620,7 +622,10 @@ export function apply(ctx) {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
             return chars[Math.floor(Math.random() * chars.length)]
           }).join('')
-          pairTokens.set(pairToken, { expiresAt: Date.now() + 60_000 })
+          // 60 秒太短：从「看到二维码」到「手机上点开链接」要经过拿手机、开相机、
+          // 扫、等隧道冷启动，实测很容易超时（用户反馈「显示配对已过期」）。
+          // 放宽到 5 分钟，仍是一次连接的时间尺度，不会长期留后门。
+          pairTokens.set(pairToken, { expiresAt: Date.now() + 300_000 })
           // 按当前连接方式取地址：Cloudflare 用 quick 隧道，Tailscale 用固定地址，
           // 都没有时回退到请求 Host（局域网直连）。
           const status = await modeStatus()
@@ -634,7 +639,7 @@ export function apply(ctx) {
           const pairURL = `${base}/?pair=${pairToken}`
           const qr = await QRCode.toDataURL(pairURL, { margin: 1, width: 360 })
           await logLine('pair token created')
-          send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value: { url: pairURL, qr, expiresIn: 60 } } })
+          send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value: { url: pairURL, qr, expiresIn: 300 } } })
           return
         }
         if (endpoint === 'pin.refresh') {
