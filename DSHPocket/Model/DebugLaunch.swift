@@ -41,12 +41,9 @@ enum DebugLaunch {
     static var noFocus: Bool { environment["DSH_NO_FOCUS"] == "1" }
     /// 截图用：使用商店截图专用示例（多轮对话 / 图文 / 时间线标题）。
     static var storeShots: Bool { environment["DSH_STORE_SHOTS"] == "1" }
-    /// 压测：生成 N 轮虚构对话（表格 + 代码块 + 列表 + 图片），
-    /// 用来验证长会话的内存与滚动性能。仅在演示模式生效。
-    static var stressRounds: Int {
-        guard let raw = environment["DSH_STRESS"], let n = Int(raw), n > 0 else { return 0 }
-        return min(n, 1000)
-    }
+    /// 压测场景列表，语法见 `StressScenario`：`messages:400,images:120,steps:80`。
+    /// 只在演示模式生效。
+    static var stressScenarios: [StressScenario] { StressScenario.parse(environment["DSH_STRESS"]) }
 
     /// 模拟器用 `SIMCTL_CHILD_DSH_SERVER`，真机用 `DEVICECTL_CHILD_DSH_SERVER`，
     /// 由 simctl / devicectl 去掉前缀后注入进程环境。

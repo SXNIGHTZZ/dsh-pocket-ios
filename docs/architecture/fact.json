@@ -1,18 +1,18 @@
 {
-  "generated_at": "2026-11-14T03:42:50+08:00",
-  "commit": "a929629",
+  "generated_at": "2026-11-14T11:37:58+08:00",
+  "commit": "147ac29",
   "layers": [
     {
       "layer": "pure-logic",
       "role": "纯逻辑层：策略/解析/传输，禁止依赖 UI",
-      "files": 58,
-      "lines": 3465
+      "files": 59,
+      "lines": 3528
     },
     {
       "layer": "app",
       "role": "App 编排层与视图",
-      "files": 92,
-      "lines": 12135
+      "files": 93,
+      "lines": 12424
     },
     {
       "layer": "ui-tests",
@@ -543,6 +543,17 @@
       ]
     },
     {
+      "file": "DSHKit/Sources/DSHKit/Store/StressScenario.swift",
+      "layer": "pure-logic",
+      "lines": 63,
+      "types": [
+        "StressScenario"
+      ],
+      "imports": [
+        "Foundation"
+      ]
+    },
+    {
       "file": "DSHKit/Sources/DSHKit/Store/ThumbnailCachePolicy.swift",
       "layer": "pure-logic",
       "lines": 28,
@@ -919,7 +930,7 @@
     {
       "file": "DSHPocket/Model/DebugLaunch.swift",
       "layer": "app",
-      "lines": 55,
+      "lines": 58,
       "types": [
         "DebugLaunch"
       ],
@@ -1401,7 +1412,7 @@
     {
       "file": "DSHPocket/Session/ConnectionModel+Demo.swift",
       "layer": "app",
-      "lines": 366,
+      "lines": 486,
       "types": [],
       "imports": [
         "AVFoundation",
@@ -1423,7 +1434,7 @@
     {
       "file": "DSHPocket/Session/ConnectionModel+Diagnostics.swift",
       "layer": "app",
-      "lines": 260,
+      "lines": 281,
       "types": [],
       "imports": [
         "AVFoundation",
@@ -1467,7 +1478,7 @@
     {
       "file": "DSHPocket/Session/ConnectionModel+History.swift",
       "layer": "app",
-      "lines": 240,
+      "lines": 273,
       "types": [],
       "imports": [
         "AVFoundation",
@@ -1611,7 +1622,7 @@
     {
       "file": "DSHPocket/Session/ConnectionModel.swift",
       "layer": "app",
-      "lines": 521,
+      "lines": 542,
       "types": [
         "ConnectionModel"
       ],
@@ -1663,7 +1674,7 @@
     {
       "file": "DSHPocket/Session/ConversationState.swift",
       "layer": "app",
-      "lines": 84,
+      "lines": 92,
       "types": [
         "ConversationState"
       ],
@@ -1734,7 +1745,7 @@
     {
       "file": "DSHPocket/Session/LiveFrameApplier.swift",
       "layer": "app",
-      "lines": 81,
+      "lines": 87,
       "types": [],
       "imports": [
         "DSHKit",
@@ -2126,7 +2137,7 @@
     {
       "file": "DSHPocket/Views/ConversationView.swift",
       "layer": "app",
-      "lines": 553,
+      "lines": 554,
       "types": [
         "ConversationView"
       ],
@@ -2437,6 +2448,17 @@
         "UserNotifications",
         "VisionKit",
         "os"
+      ]
+    },
+    {
+      "file": "DSHPocket/Views/RenameSessionSheet.swift",
+      "layer": "app",
+      "lines": 76,
+      "types": [
+        "RenameSessionSheet"
+      ],
+      "imports": [
+        "SwiftUI"
       ]
     },
     {

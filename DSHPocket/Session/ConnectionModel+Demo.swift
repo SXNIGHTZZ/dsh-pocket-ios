@@ -146,7 +146,7 @@ extension ConnectionModel {
     static func demoMessages(for sessionId: String) -> [PocketMessage] {
 #if DEBUG
         if DebugLaunch.storeShots { return storeShotMessages(for: sessionId) }
-        if DebugLaunch.stressRounds > 0 { return stressMessages(rounds: DebugLaunch.stressRounds) }
+        if !DebugLaunch.stressScenarios.isEmpty { return stressMessages(scenarios: DebugLaunch.stressScenarios) }
 #endif
         if LanguageStore.shared.isEnglish { return demoMessagesEN(for: sessionId) }
         switch sessionId {
@@ -244,6 +244,19 @@ extension ConnectionModel {
     static func demoSteps(for sessionId: String) -> [PocketStep] {
 #if DEBUG
         if DebugLaunch.storeShots { return [] }
+        // 压测：steps:N 生成 N 个步骤（对应 steps 场景的消息轮数）。
+        if let scaled = DebugLaunch.stressScenarios.first(where: {
+            if case .steps = $0 { return true }
+            return false
+        }), case .steps(let count) = scaled {
+            return (0..<count).map { index in
+                PocketStep(id: "stress-step-\(index)", sequence: index * 2 + 3, turn: 1, number: index + 1,
+                           name: index % 3 == 0 ? "bash" : (index % 3 == 1 ? "read" : "write"),
+                           detail: "压测步骤 \(index + 1) · 执行中",
+                           resultText: "步骤 \(index + 1) 的输出结果：done",
+                           finished: true)
+            }
+        }
 #endif
         guard sessionId == "demo-1" else { return [] }
         let en = LanguageStore.shared.isEnglish
@@ -368,48 +381,105 @@ extension ConnectionModel {
     }
 
 #if DEBUG
-    /// 压测数据：N 轮「用户提问 + 助手 Markdown 回复」，混入表格/代码块/列表与图片。
+    /// 压测数据：按场景列表生成对话。
     ///
-    /// 目的是在模拟器上复现长会话的内存与滚动压力，不需要真机也不需要连电脑。
-    /// 每 10 轮带一张图片，模拟图文混排。
-    static func stressMessages(rounds: Int) -> [PocketMessage] {
+    /// 场景可叠加（`messages:400,images:120`），各自贡献一组消息。
+    /// 目的是在模拟器上复现长会话 / 图片 / 步骤 / 极端 Markdown 的压力，
+    /// 不需要真机，也不需要连电脑。
+    static func stressMessages(scenarios: [StressScenario]) -> [PocketMessage] {
         var result: [PocketMessage] = []
         var sequence = 0
-        for index in 0..<rounds {
+
+        func append(user: String, assistant: String, image: Bool) {
             sequence += 1
-            result.append(PocketMessage(
-                demoText: "第 \(index + 1) 轮提问：帮我看一下这组数据的趋势，重点说异常项。",
-                isUser: true, sequence: sequence))
-
+            result.append(PocketMessage(demoText: user, isUser: true, sequence: sequence))
             sequence += 1
-            let withImage = index % 10 == 0
-            result.append(PocketMessage(demoText: """
-            ### 第 \(index + 1) 轮分析
+            result.append(PocketMessage(demoText: assistant, isUser: false, sequence: sequence,
+                                        localImages: image ? [demoPicture] : []))
+        }
 
-            下面按指标拆开说。整体结论是**没有严重异常**，两项需要留意。
-
-            | 指标 | 当前值 | 参考区间 | 判断 |
-            | --- | --- | --- | --- |
-            | 指标 A | \(index * 3 % 97) | 40–80 | 正常 |
-            | 指标 B | \(index * 7 % 53) | 10–45 | 略高 |
-            | 指标 C | \(index * 11 % 31) | 5–25 | 正常 |
-
-            ```swift
-            let sample = \(index)
-            let ratio = Double(sample) / 100.0
-            print(ratio)
-            ```
-
-            **需要留意的两点**
-
-            1. 指标 B 连续三轮略高，建议下周复测
-            2. 指标 C 波动较大，但仍在区间内
-
-            如果要把这组数据导成表格，告诉我，我可以直接生成 CSV。
-            """, isUser: false, sequence: sequence,
-                 localImages: withImage ? [demoPicture] : []))
+        for scenario in scenarios {
+            switch scenario {
+            case .messages(let rounds):
+                for index in 0..<rounds {
+                    append(user: Self.stressUserText(index),
+                           assistant: Self.stressAssistantText(index), image: false)
+                }
+            case .images(let count):
+                for index in 0..<count {
+                    append(user: "第 \(index + 1) 张图：帮我看下这张截图里的问题。",
+                           assistant: "收到，这是第 \(index + 1) 张。图里主要问题在右侧边距，其余正常。",
+                           image: true)
+                }
+            case .steps(let count):
+                for index in 0..<count {
+                    append(user: "第 \(index + 1) 步任务：跑一下构建看看。",
+                           assistant: "这一步有 \(count) 个子步骤，过程已折叠，展开可以看明细。",
+                           image: false)
+                }
+            case .markdownExtreme:
+                append(user: "给我一张大表和一段长代码。",
+                       assistant: Self.extremeMarkdown(), image: false)
+            case .sessions:
+                // 会话规模在列表层生成，不产出消息。
+                break
+            }
         }
         return result
+    }
+
+    private static func stressUserText(_ index: Int) -> String {
+        "第 \(index + 1) 轮提问：帮我看一下这组数据的趋势，重点说异常项。"
+    }
+
+    private static func stressAssistantText(_ index: Int) -> String {
+        """
+        ### 第 \(index + 1) 轮分析
+
+        下面按指标拆开说。整体结论是**没有严重异常**，两项需要留意。
+
+        | 指标 | 当前值 | 参考区间 | 判断 |
+        | --- | --- | --- | --- |
+        | 指标 A | \(index * 3 % 97) | 40–80 | 正常 |
+        | 指标 B | \(index * 7 % 53) | 10–45 | 略高 |
+        | 指标 C | \(index * 11 % 31) | 5–25 | 正常 |
+
+        ```swift
+        let sample = \(index)
+        let ratio = Double(sample) / 100.0
+        print(ratio)
+        ```
+
+        **需要留意的两点**
+
+        1. 指标 B 连续三轮略高，建议下周复测
+        2. 指标 C 波动较大，但仍在区间内
+
+        如果要把这组数据导成表格，告诉我，我可以直接生成 CSV。
+        """
+    }
+
+    /// 极端 Markdown：超宽表格 + 超长代码块，用来压 Textual 的解析与布局。
+    private static func extremeMarkdown() -> String {
+        var table = "| 列一 | 列二 | 列三 | 列四 | 列五 | 列六 | 列七 | 列八 |\n"
+        table += "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        for row in 0..<100 {
+            table += "| 值 \(row) | 说明 \(row) | 12345 | 中文内容 \(row) | abc | δ | 0.5 | 完成 |\n"
+        }
+        var code = "```swift\n"
+        for line in 0..<500 {
+            code += "let value\(line) = compute(\(line))\n"
+        }
+        code += "```\n"
+        return """
+        ### 极端 Markdown 压测
+
+        \(table)
+
+        \(code)
+
+        以上是 100 行 8 列表格与 500 行代码块。
+        """
     }
 #endif
 }

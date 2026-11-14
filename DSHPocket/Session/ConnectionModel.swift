@@ -312,6 +312,21 @@ final class ConnectionModel {
     /// 演示会话列表。标题走 L10n——英文界面的 App Store 截图不能出现中文标题。
     static var demoSessionList: [PocketSession] {
         let now = Date().timeIntervalSince1970
+        // 压测：sessions:N 生成 N 个虚构会话，用来测列表规模与分组计算。
+        #if DEBUG
+        if let scaled = DebugLaunch.stressScenarios.first(where: {
+            if case .sessions = $0 { return true }
+            return false
+        }), case .sessions(let count) = scaled {
+            return (0..<count).map { index in
+                PocketSession(sessionId: "stress-session-\(index)",
+                              updatedAt: now - Double(index * 60),
+                              running: false, blank: false,
+                              title: "压测会话 \(index + 1)",
+                              cwd: index % 7 == 0 ? "~/projects/stress" : "~/projects/other")
+            }
+        }
+        #endif
         return [
             PocketSession(sessionId: "demo-1", updatedAt: now - 60, running: false, blank: false,
                           title: L10n.t("做一个 iOS 版 DSH"), cwd: "~/projects/ios-client"),
