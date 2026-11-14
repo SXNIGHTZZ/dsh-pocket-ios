@@ -151,7 +151,8 @@ extension ConnectionModel {
         switch sessionId {
         case "demo-1":
             return [
-                PocketMessage(demoText: "帮我做一个 iOS 版的 DSH：要能连我电脑上的会话，原生客户端，不要网页套壳。",
+                // 用户气泡是固定的深绿色（不随深浅模式），行内代码在这上面最容易糊成白块。
+                PocketMessage(demoText: "帮我做一个 iOS 版的 DSH：要能连我电脑上的 `会话`，原生客户端，不要网页套壳。",
                               isUser: true, sequence: 1),
                 PocketMessage(demoText: "可以。DSH 讲究「万物皆插件」，我先去插件市场找现成能力，再组装起来。",
                               isUser: false, sequence: 2),
@@ -166,11 +167,14 @@ extension ConnectionModel {
 
                 ### 已经完成
 
-                - 原生 SwiftUI 客户端：会话、实时流、图片、Markdown
+                - 原生 SwiftUI 客户端：`会话`、`实时流`、`图片`、`Markdown`
                 - 扫码即连，局域网 / Tailscale / 公网三种通道
                 - 模拟器已跑通，会话历史和电脑端实时同步
 
                 想再加什么能力，直接去插件市场里装一个就行。
+
+                > 行内代码（上面打反引号的词）不该有底色：气泡本身有颜色，
+                > 加浅色底会把文字糊成白块。
                 """, isUser: false, sequence: 7)
             ]
         case "demo-2":
@@ -466,8 +470,10 @@ extension ConnectionModel {
 
         **需要留意的两点**
 
-        1. 指标 B 连续三轮略高，建议下周复测
-        2. 指标 C 波动较大，但仍在区间内
+        1. `指标 B` 连续三轮略高（阈值 `> 45`），建议下周复测
+        2. `指标 C` 波动较大，但仍在区间 `5–25` 内
+
+        > 行内代码在这里不该有底色：气泡本身是深色的，白底会把文字糊掉。
 
         如果要把这组数据导成表格，告诉我，我可以直接生成 CSV。
         """

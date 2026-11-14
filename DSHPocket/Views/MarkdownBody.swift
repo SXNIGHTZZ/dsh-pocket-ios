@@ -23,13 +23,20 @@ struct MarkdownBody: View {
     var body: some View {
         StructuredText(markdown: Self.strippingCodeLanguage(text))
             .textual.textSelection(.enabled)
-            // 注意顺序：headingStyle 必须放在 structuredTextStyle 之前（更靠近内容），
-            // 否则会被 .gitHub 内置的 headingStyle 覆盖（踩过：改字号完全不生效）。
-            .textual.headingStyle(ChatHeadingStyle())
-            // 手机上别把表格列挤成一字一行：宽表横向滚动，宽度上限给到容器的 2.2 倍。
-            // 必须放在 structuredTextStyle **之前**：.gitHub 会重置表格样式，放在后面等于没设。
-            .textual.tableStyle(PhoneTableStyle())
-            .textual.structuredTextStyle(.gitHub)
+            // 标题、表格、行内代码统一在 ChatStructuredStyle 里配置。
+            //
+            // 以前这里是「.textual.headingStyle / .textual.tableStyle 放在 .gitHub 之前」的写法，
+            // 靠 modifier 顺序抢优先级；行内代码没法这么抢——`inlineStyle` 在
+            // `StructuredTextStyle` 里是 `let`，`.textual.inlineStyle(...)` 只作用于 `InlineText`。
+            // 所以整体换成一个自定义 style，顺序问题一次性消掉。
+            .textual.structuredTextStyle(ChatStructuredStyle())
+            // 行内代码**不要背景色**。
+            // `.gitHub` 的内置样式给行内代码加了 `githubSecondaryBackground`，在深色模式下
+            // 是浅色块——而我们把它渲染在深绿气泡上，白底 + 白字直接糊成一片（真机截图可见：
+            // `markdown:code:950`、`MarkdownBody` 这些行内代码只剩白块）。
+            // 等宽 + 略小字号已经足够区分，背景色在彩色气泡上只会降低可读性。
+            // 必须放在 `structuredTextStyle(.gitHub)` 之后，否则被它内置的 inlineStyle 覆盖。
+            .textual.inlineStyle(InlineStyle().code(.monospaced, .fontScale(0.94)))
             .foregroundStyle(foreground)
     }
 }
