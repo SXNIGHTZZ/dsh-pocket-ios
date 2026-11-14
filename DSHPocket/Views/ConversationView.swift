@@ -130,10 +130,10 @@ struct ConversationView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    // 用 LazyVStack：历史分页会持续累积消息（往上翻一次多一页），
-                    // 之前的 VStack 会把所有消息一次性布局且永不释放，翻得越多越卡。
-                    // 行重叠的旧问题靠每行稳定的 .id(entry.id) 兜住——行身份不变就不会复用错高度。
-                    LazyVStack(spacing: 0) {
+                    // 用 VStack：消息已在数据层硬裁到 24 条（见 retainedMessageLimit），
+                    // 全量布局的成本可忽略。LazyVStack 反而有害——它会缓存行高，
+                    // 而 Markdown 行是动态高度，滚动时高度重算会导致内容「来回跳」（真机实测）。
+                    VStack(spacing: 0) {
                         Color.clear.frame(height: 1).id(Self.topAnchorID)
                         if model.isLoadingOlder {
                             HStack(spacing: 6) {
