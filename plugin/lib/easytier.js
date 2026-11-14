@@ -22,6 +22,9 @@ import { promisify } from 'node:util'
 
 const execFileP = promisify(execFile)
 
+/** WireGuard 客户端（手机）所在的网段；与 --vpn-portal 的路径段一致。 */
+const VPN_CLIENT_SUBNET = '10.14.14.0/24'
+
 /** 常见安装位置（Homebrew / 官方脚本 / 手动解压）。 */
 const FALLBACK_DIRS = [
   '/opt/homebrew/bin',
@@ -118,16 +121,17 @@ export function patchEndpoint(config, host, port) {
  * @returns {string}
  */
 export function coreCommand({ networkName, networkSecret, portalPort, peers = '' }) {
+  // 注意格式：`--vpn-portal wg://<监听地址>:<端口>/<客户端网段>`
+  // 只写 wg://0.0.0.0:11011 会被拒（实测 2.6.4 的 --help 要求带网段）。
+  // 也不存在 --vpn-portal-client / --vpn-portal-private-key 这两个参数
+  // —— 之前凭印象写过，跑起来直接报未知参数。
   const parts = [
     'sudo easytier-core',
     '-d',
     `--network-name ${networkName}`,
     `--network-secret ${networkSecret}`,
-    `--vpn-portal wg://0.0.0.0:${portalPort}`,
-    '--vpn-portal-private-key "$(wg genkey)"',
+    `--vpn-portal wg://0.0.0.0:${portalPort}/${VPN_CLIENT_SUBNET}`,
   ]
-  // 手机作为一台 WireGuard 客户端注册进虚拟网络
-  parts.push('--vpn-portal-client phone=10.144.144.3')
   if (peers) parts.push(`-p ${peers}`)
   return parts.join(' ')
 }

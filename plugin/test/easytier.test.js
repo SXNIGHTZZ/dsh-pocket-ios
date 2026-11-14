@@ -72,8 +72,11 @@ test('coreCommand：包含所有必需参数', () => {
   assert.ok(cmd.startsWith('sudo easytier-core'))
   assert.ok(cmd.includes('--network-name dsh-abc'))
   assert.ok(cmd.includes('--network-secret sec123'))
-  assert.ok(cmd.includes('--vpn-portal wg://0.0.0.0:11011'))
-  assert.ok(cmd.includes('--vpn-portal-client phone='))
+  // 格式必须是 wg://<监听>:<端口>/<客户端网段>，只写前半段会被 easytier 拒绝
+  assert.ok(cmd.includes('--vpn-portal wg://0.0.0.0:11011/10.14.14.0/24'))
+  // 这两个参数在 2.6.4 里不存在，写进去会报未知参数
+  assert.ok(!cmd.includes('--vpn-portal-client'))
+  assert.ok(!cmd.includes('--vpn-portal-private-key'))
   assert.ok(cmd.includes('-p tcp://public.easytier.cn:11010'))
 })
 
