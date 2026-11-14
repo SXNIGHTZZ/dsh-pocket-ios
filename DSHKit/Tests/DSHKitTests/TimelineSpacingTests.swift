@@ -4,19 +4,19 @@ import XCTest
 final class TimelineSpacingTests: XCTestCase {
     func testSameSpeakerIsTight() {
         XCTAssertEqual(TimelineSpacing.between(previousIsGroup: false, currentIsGroup: false,
-                                               previousIsUser: true, currentIsUser: true), 8)
+                                               previousIsUser: true, currentIsUser: true), 5)
     }
 
     func testSpeakerChangeIsLoose() {
         XCTAssertEqual(TimelineSpacing.between(previousIsGroup: false, currentIsGroup: false,
-                                               previousIsUser: true, currentIsUser: false), 18)
+                                               previousIsUser: true, currentIsUser: false), 12)
     }
 
     func testProcessRowsUseGroupSpacing() {
         XCTAssertEqual(TimelineSpacing.between(previousIsGroup: true, currentIsGroup: false,
-                                               previousIsUser: nil, currentIsUser: true), 10)
+                                               previousIsUser: nil, currentIsUser: true), 7)
         XCTAssertEqual(TimelineSpacing.between(previousIsGroup: false, currentIsGroup: false,
-                                               previousIsUser: nil, currentIsUser: nil), 10)
+                                               previousIsUser: nil, currentIsUser: nil), 7)
     }
 }
 
