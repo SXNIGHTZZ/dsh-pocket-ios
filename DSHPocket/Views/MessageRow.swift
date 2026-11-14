@@ -208,6 +208,7 @@ struct MessageRow: View {
                         VStack(alignment: .leading, spacing: 8) {
                             if !message.text.isEmpty { markdownContent }
                             userImageThumbnails
+                                .layoutDebug("C5")
                         }
                         .padding(.horizontal, 13).padding(.vertical, 10)
                         .background(Color(red: 0.08, green: 0.48, blue: 0.37),
@@ -227,6 +228,7 @@ struct MessageRow: View {
                         } else if !message.isUser, !message.images.isEmpty {
                             ForEach(message.images) { ref in
                                 AttachmentThumbnail(ref: ref, model: model, size: 150)
+                                    .layoutDebug("C5")
                             }
                         }
                         if !message.text.isEmpty {

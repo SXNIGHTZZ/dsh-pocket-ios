@@ -46,5 +46,6 @@ struct TurnFailureRow: View {
         .background(Color.red.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(L10n.t("本轮运行失败")) \(failure.displayText)")
+        .layoutDebug("C12")
     }
 }
