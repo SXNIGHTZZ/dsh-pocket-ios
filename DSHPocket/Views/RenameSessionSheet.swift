@@ -52,12 +52,18 @@ struct RenameSessionSheet: View {
                 }
             }
         }
-        .presentationDetents([.height(220)])
+        .presentationDetents([.medium])
         .onAppear {
-            // sheet 的转场动画结束后再聚焦，否则键盘会立刻被收起。
+            // 多次尝试聚焦：sheet 转场期间设 focused 会被系统丢弃，
+            // 单次 400ms 实测无效，所以立即 + 之后各试几次。
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(400))
                 focused = true
+                for delay in [150, 400, 800, 1200] {
+                    try? await Task.sleep(for: .milliseconds(delay))
+                    if !focused {
+                        focused = true
+                    }
+                }
             }
         }
     }

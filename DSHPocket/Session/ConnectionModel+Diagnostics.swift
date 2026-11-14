@@ -76,6 +76,27 @@ extension ConnectionModel {
             ("Flushing", outbox.flushInFlight ? "yes" : "no")
         ]))
 
+        // 实时帧信号：卡顿时用来区分「没收到帧」和「收到帧但渲染慢」。
+        // 前者是网络/服务端问题，后者是客户端渲染问题——过去只能靠猜。
+        if let conversation = activeConversation {
+            let frameTimes = conversation.recentFrameTimes
+            var rows: [(String, String)] = [
+                ("Frames", "\(frameTimes.count) / 120 (ring buffer)")
+            ]
+            if let newest = frameTimes.last, let oldest = frameTimes.first, frameTimes.count >= 2 {
+                let windowSeconds = newest.timeIntervalSince(oldest)
+                let rate = windowSeconds > 0 ? Double(frameTimes.count - 1) / windowSeconds : 0
+                let gaps = zip(frameTimes.dropFirst(), frameTimes).map { $0.timeIntervalSince($1) }
+                let avgGap = gaps.reduce(0, +) / Double(max(gaps.count, 1))
+                let maxGap = gaps.max() ?? 0
+                rows.append(("Rate", String(format: "%.2f /s over %.1fs", rate, windowSeconds)))
+                rows.append(("Gap avg", "\(Int(avgGap * 1000)) ms"))
+                rows.append(("Gap max", "\(Int(maxGap * 1000)) ms"))
+            }
+            rows.append(("Since frame", "\(Int(Date().timeIntervalSince(conversation.lastLiveFrameAt) * 1000)) ms"))
+            sections.append(.init("Live Signal", rows))
+        }
+
         // 事件行固定英文：样本里的网络文案已经是英文标识（见 diagnosticNetworkLabel）。
         let events = diagnostics.samples.map { sample in
             DiagnosticsReport.eventLine(

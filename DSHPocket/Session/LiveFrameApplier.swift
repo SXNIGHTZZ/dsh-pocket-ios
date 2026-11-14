@@ -15,6 +15,12 @@ extension ConnectionModel {
         guard activeConversation?.sessionId == sessionId,
               sessionStore.selected?.sessionId == sessionId else { return }
         lastLiveFrameAt = Date()
+        if let conversation = activeConversation {
+            conversation.recentFrameTimes.append(lastLiveFrameAt)
+            if conversation.recentFrameTimes.count > 120 {
+                conversation.recentFrameTimes.removeFirst(conversation.recentFrameTimes.count - 120)
+            }
+        }
         // 帧类型判定在 DSHKit（可测）：快照 / 消息 / steer 收件箱 / 过程事件 / 认不出。
         switch LiveFrameRouter.kind(of: value) {
         case .snapshot:

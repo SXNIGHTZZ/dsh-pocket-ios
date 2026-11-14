@@ -31,7 +31,15 @@ final class ConversationState {
     var isTurnRunning = false
     var turnStartedAt: Date?
     var scrollToBottomTick = 0
-    var lastLiveFrameAt = Date()
+    /// 最近一次收到实时帧的时间。**故意不参与观察**：
+    /// 它每帧都会更新，若参与 @Observable 会让整个 ConversationView 每帧重绘
+    /// （进而重算 entries、重解析每条消息的 Markdown），是长会话卡顿的主因。
+    /// 唯一用途是「15 秒没帧判定卡住」，不需要触发 UI。
+    @ObservationIgnored var lastLiveFrameAt = Date()
+    /// 最近实时帧的到达时间（环形缓冲，最多 120 个）。
+    /// 用来在诊断报告里给出「帧频率 / 帧间隔」——卡顿时能看出是「没收到帧」还是「收到帧但渲染慢」。
+    /// 同样不参与观察：它每帧都变。
+    @ObservationIgnored var recentFrameTimes: [Date] = []
     var liveTask: Task<Void, Never>?
     var fallbackTask: Task<Void, Never>?
     /// 后台任务名单（`job/list` 流）。整份替换，不是增量。
