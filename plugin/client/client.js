@@ -240,7 +240,11 @@ window.__ModuleLoader__.load({
               remaining > 0 ? remaining + "s" : makeT(currentLang())("已过期", "Expired")),
             React.createElement("div", { style: { fontSize: 11, opacity: 0.55, marginBottom: 2 } }, makeT(currentLang())("固定地址", "Fixed address")),
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 } },
-              React.createElement("div", { style: { fontSize: 12.5, wordBreak: "break-all", flex: "1 1 170px", minWidth: 0 } }, ((status && (status.address || status.httpsUrl)) || (loading ? makeT(currentLang())("检测中…", "Checking…") : makeT(currentLang())("当前方式还没有地址", "No address for this mode yet")))),
+              React.createElement("div", { style: { fontSize: 12.5, wordBreak: "break-all", flex: "1 1 170px", minWidth: 0 } }, ((status && (status.address || status.httpsUrl))
+              || (loading ? makeT(currentLang())("检测中…", "Checking…")
+                : status && status.state === "starting" ? makeT(currentLang())("正在启动，稍候…", "Starting, please wait…")
+                : status && status.state === "error" ? makeT(currentLang())("获取失败", "Failed")
+                : makeT(currentLang())("当前方式还没有地址", "No address for this mode yet")))),
               React.createElement("button", { type: "button", onClick: function () { copy(status && (status.address || status.httpsUrl), "url"); }, style: chipStyle }, copied === "url" ? makeT(currentLang())("已复制", "Copied") : makeT(currentLang())("复制", "Copy"))),
             React.createElement("div", { style: { fontSize: 11, opacity: 0.55, marginBottom: 4 } }, makeT(currentLang())("访问密码（手动登录用）", "Access PIN (manual login)")),
             React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" } },
