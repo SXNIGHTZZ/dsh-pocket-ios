@@ -38,19 +38,35 @@ extension ConnectionModel {
                 try await socket.send(.string(text))
                 recordDiagnostic("问答通道：已发起连接")
                 var clientId: String?
+                var framesSeen = 0
                 while !Task.isCancelled {
                     let frame = try await Self.receiveRemoteEventFrame(socket: socket)
+                    // 前几帧原样记录：协议字段名没文档，先看真实形状（只记 5 帧，避免刷屏）。
+                    if framesSeen < 5 {
+                        framesSeen += 1
+                        let text = String(data: frame, encoding: .utf8) ?? "<\(frame.count)B>"
+                        recordDiagnostic("问答通道原始帧#\(framesSeen): \(text.prefix(400))")
+                    }
                     guard let object = try? JSONSerialization.jsonObject(with: frame) as? [String: Any] else {
                         continue
                     }
-                    // 第一帧是就绪信息：后面回传结果要用它给的 clientId。
-                    if let ready = RemoteEventProtocol.ready(from: object) {
+                    // `$events` 的帧包在 `{type:"item", streamId, value:{...}}` 里，
+                    // 解包字段是 **value**（不是 item）。实测原始帧：
+                    // {"type":"item","streamId":"...","value":{"type":"ready","clientId":"...","host":{"home":"..."}}}
+                    let payload: [String: Any]
+                    if object["type"] as? String == "item",
+                       let item = object["value"] as? [String: Any] {
+                        payload = item
+                    } else {
+                        payload = object
+                    }
+                    if let ready = RemoteEventProtocol.ready(from: payload) {
                         clientId = ready.clientId
                         recordDiagnostic("问答通道就绪 clientId=\(ready.clientId.prefix(8))")
                         continue
                     }
                     guard let clientId else { continue }
-                    switch RemoteEventProtocol.frame(from: object) {
+                    switch RemoteEventProtocol.frame(from: payload) {
                     case .cancel(let eventId):
                         questionInbox.cancelProviderRequest(eventId: eventId)
                         recordDiagnostic("问答通道：服务端撤销了请求 \(eventId.prefix(12))")
