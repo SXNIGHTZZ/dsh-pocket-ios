@@ -134,11 +134,14 @@ window.__ModuleLoader__.load({
       React.useEffect(function () {
         refreshStatus();
         generatePair();
-        // 倒计时只递减，**不再自动换码**。
-        // 自动换的坑：用户正在扫的时候刚好换掉，扫到的是刚失效的那张，
-        // 表现就是「明明刚显示却说过期」。过期后由用户点「重新生成」。
+        // 倒计时到末期自动换新码（用户要的就是持续刷新，接受"扫到刚换掉"的概率）。
+        // 5 分钟有效期，剩 30 秒换——比原来的 60 秒/剩 8 秒宽松得多。
         var timer = setInterval(function () {
-          setRemaining(function (prev) { return prev > 0 ? prev - 1 : 0; });
+          setRemaining(function (prev) {
+            var next = prev - 1;
+            if (next <= 30) { generatePair(); return 300; }
+            return next;
+          });
         }, 1000);
         // 隧道/下载还没就绪时轮询：Cloudflare 首次要下 24MB，不能让用户干等白屏。
         // 状态从 starting 变 ready 后，再补生成一次二维码（此时的地址才是隧道地址）。
