@@ -333,6 +333,7 @@ enum L10n {
         "复制会话地址": "Copy session address",
         "复制会话日志路径": "Copy session log path",
         "复制诊断信息": "Copy diagnostics",
+        "已复制诊断信息": "Diagnostics copied",
         "对话记录": "Chat history",
         "已完成，等待你的回复": "Done, waiting for your reply",
         "已置顶": "Pinned",

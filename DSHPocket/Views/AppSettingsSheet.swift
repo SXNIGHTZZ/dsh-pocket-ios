@@ -19,6 +19,10 @@ import UserNotifications
 struct AppSettingsSheet: View {
     @Bindable var model: ConnectionModel
     @AppStorage("dsh-pocket.session-list-mode") private var sessionListModeRaw = SessionListMode.timeline.rawValue
+    /// 复制诊断后的短暂反馈：按钮图标从听诊器变成对勾。
+    /// 放在设置里而不是会话页，是因为连不上时根本没有会话可进——
+    /// 而「连不上」恰恰是最需要诊断的时候（2026-11-15 用户反馈）。
+    @State private var diagnosticsCopied = false
     @Environment(\.dismiss) private var dismiss
     @State private var languageRevision = 0
     /// 排序面板的上下文。用 item 而不是「bool + 数据」两个状态：
@@ -87,6 +91,17 @@ struct AppSettingsSheet: View {
                     }
                 }
                 Section(L10n.t("调试")) {
+                    Button {
+                        UIPasteboard.general.string = model.diagnosticReport()
+                        diagnosticsCopied = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            diagnosticsCopied = false
+                        }
+                    } label: {
+                        Label(diagnosticsCopied ? L10n.t("已复制诊断信息") : L10n.t("复制诊断信息"),
+                              systemImage: diagnosticsCopied ? "checkmark.circle.fill" : "stethoscope")
+                    }
                     Toggle(isOn: Binding(
                         get: { LayoutDebug.enabled },
                         set: { LayoutDebug.enabled = $0 }
