@@ -76,21 +76,33 @@ extension ConnectionModel {
             ("Flushing", outbox.flushInFlight ? "yes" : "no")
         ]))
 
-        // 分页信号：区分「上滑没触发」「触发了但服务端没回」「回了但没合并」。
-        // 用户反馈「上滑加载不出历史」时，看这一段就能定位卡在哪一步。
-        if let conversation = activeConversation {
-            var rows: [(String, String)] = [
-                ("Has more", hasMoreOlder ? "yes" : "no"),
-                ("Loading older", isLoadingOlder ? "yes" : "no"),
-                ("Attempts", "\(conversation.olderLoadAttempts) (success \(conversation.olderLoadSuccesses))")
-            ]
-            if let result = conversation.olderLoadLastResult {
-                let ago = conversation.olderLoadLastAt.map { "\(Int(Date().timeIntervalSince($0)))s ago" } ?? "—"
-                rows.append(("Last load", "\(result) · \(ago)"))
-            }
-            rows.append(("Messages now", "\(conversation.messages.count)"))
-            sections.append(.init("Pagination", rows))
-        }
+        // ── Pagination 段：暂时注释 ──────────────────────────────────────────
+        //
+        // 为什么注释：产品已明确「只保留最近 30 条、不提供往上翻更早历史」（方案 B），
+        // 所以这几项现在恒为固定值（Has more=no / Attempts=0），留在报告里是噪音。
+        //
+        // 但**统计字段仍在正常维护**（ConversationState.olderLoadAttempts / Successes /
+        // LastAdded / LastAt / LastResult，以及 loadOlderMessages 和 .messages 分支里的写入点），
+        // 日后如果恢复「上滑加载历史」，把下面这段注释解开就能直接用，不用重新接线。
+        //
+        // 恢复步骤：
+        //   1. 解开这段注释
+        //   2. ConnectionModel+Live 的 snapshot 分支去掉 `hasMoreOlder = false`（改回 hasMore）
+        //   3. ConnectionModel+Live 的 .messages 分支恢复「按方向裁剪」
+        //
+        // if let conversation = activeConversation {
+        //     var rows: [(String, String)] = [
+        //         ("Has more", hasMoreOlder ? "yes" : "no"),
+        //         ("Loading older", isLoadingOlder ? "yes" : "no"),
+        //         ("Attempts", "\(conversation.olderLoadAttempts) (success \(conversation.olderLoadSuccesses))")
+        //     ]
+        //     if let result = conversation.olderLoadLastResult {
+        //         let ago = conversation.olderLoadLastAt.map { "\(Int(Date().timeIntervalSince($0)))s ago" } ?? "—"
+        //         rows.append(("Last load", "\(result) · \(ago)"))
+        //     }
+        //     rows.append(("Messages now", "\(conversation.messages.count)"))
+        //     sections.append(.init("Pagination", rows))
+        // }
 
         // 实时帧信号：卡顿时用来区分「没收到帧」和「收到帧但渲染慢」。
         // 前者是网络/服务端问题，后者是客户端渲染问题——过去只能靠猜。
