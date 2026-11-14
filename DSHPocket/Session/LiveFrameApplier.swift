@@ -10,17 +10,26 @@ import DSHKit
 /// - 全部依赖闭包注入：它要改消息列表、发件箱标记、过程步骤，但模型不该反过来知道帧的形态。
 /// - 帧**分类**不在这里，而在 `LiveFrameRouter`（DSHKit，可测）。
 extension ConnectionModel {
+    /// 记录一次「收到服务端数据」（实时帧或快照）。
+    ///
+    /// 抽出来是因为两条路径都要记：`acceptLive`（实时帧）和 `applyCoordinatorUpdate(.snapshot)`
+    /// （打开会话时的快照）。只记前者会让刚打开会话显示「0 帧 / 83 秒」，误判成流断了。
+    @MainActor
+    func recordLiveFrameArrival() {
+        let now = Date()
+        lastLiveFrameAt = now
+        guard let conversation = activeConversation else { return }
+        conversation.recentFrameTimes.append(now)
+        if conversation.recentFrameTimes.count > 120 {
+            conversation.recentFrameTimes.removeFirst(conversation.recentFrameTimes.count - 120)
+        }
+    }
+
     @MainActor
     func acceptLive(_ value: [String: Any], sessionId: String) {
         guard activeConversation?.sessionId == sessionId,
               sessionStore.selected?.sessionId == sessionId else { return }
-        lastLiveFrameAt = Date()
-        if let conversation = activeConversation {
-            conversation.recentFrameTimes.append(lastLiveFrameAt)
-            if conversation.recentFrameTimes.count > 120 {
-                conversation.recentFrameTimes.removeFirst(conversation.recentFrameTimes.count - 120)
-            }
-        }
+        recordLiveFrameArrival()
         // 帧类型判定在 DSHKit（可测）：快照 / 消息 / steer 收件箱 / 过程事件 / 认不出。
         switch LiveFrameRouter.kind(of: value) {
         case .snapshot:

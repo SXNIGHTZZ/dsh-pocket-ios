@@ -169,6 +169,10 @@ extension ConnectionModel {
             liveConnection = Self.appConnectionState(from: state)
             if case .connected = state { conversationError = nil }
         case .snapshot(let dshMessages, let dshSteps, let hasMore):
+            // 快照也是一次「收到数据」，要计入实时帧信号。
+            // 否则打开会话后 Live Signal 显示 0 帧 / 83 秒，看起来像实时流断了
+            // （真机实测踩过：这个会话明明刚加载过快照）。
+            recordLiveFrameArrival()
             mergeMessages(dshMessages.map(Self.pocketMessage(from:)))
             for step in dshSteps { applyDSHStep(step, historical: true) }
             hasMoreOlder = hasMore
