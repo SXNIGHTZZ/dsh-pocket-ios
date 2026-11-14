@@ -134,13 +134,11 @@ window.__ModuleLoader__.load({
       React.useEffect(function () {
         refreshStatus();
         generatePair();
+        // 倒计时只递减，**不再自动换码**。
+        // 自动换的坑：用户正在扫的时候刚好换掉，扫到的是刚失效的那张，
+        // 表现就是「明明刚显示却说过期」。过期后由用户点「重新生成」。
         var timer = setInterval(function () {
-          setRemaining(function (prev) {
-            var next = prev - 1;
-            // 剩 30 秒就换新码（原来是 8 秒，但 60 秒的有效期本身就太短）
-            if (next <= 30) { generatePair(); return 300; }
-            return next;
-          });
+          setRemaining(function (prev) { return prev > 0 ? prev - 1 : 0; });
         }, 1000);
         // 隧道/下载还没就绪时轮询：Cloudflare 首次要下 24MB，不能让用户干等白屏。
         // 状态从 starting 变 ready 后，再补生成一次二维码（此时的地址才是隧道地址）。
@@ -215,13 +213,18 @@ window.__ModuleLoader__.load({
         React.createElement("div", { style: { fontSize: 11, opacity: 0.6, marginBottom: 10, lineHeight: 1.5 } }, modeHint),
         React.createElement("div", { style: { height: 1, background: "rgba(0,0,0,.06)", margin: "10px 0" } }),
         React.createElement("div", { style: { display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" } },
-          pairValue.data && pairValue.data.qr
+          remaining <= 0 && !pairValue.loading
+            ? React.createElement("div", { style: { width: 148, height: 148, borderRadius: 8, border: "1px dashed rgba(0,0,0,.15)", display: "flex", flexDirection: "column", gap: 8, alignItems: "center", justifyContent: "center", fontSize: 12, flex: "0 0 148px", textAlign: "center", padding: 8 } },
+                React.createElement("span", { style: { opacity: 0.6 } }, makeT(currentLang())("二维码已过期", "QR expired")),
+                React.createElement("button", { type: "button", onClick: generatePair, style: chipPrimary }, makeT(currentLang())("重新生成", "Regenerate")))
+            : pairValue.data && pairValue.data.qr
             ? React.createElement("img", { src: pairValue.data.qr, alt: makeT(currentLang())("扫码连接二维码", "Scan-to-connect QR"), style: { width: 148, height: 148, borderRadius: 8, background: "#fff", padding: 5, border: "1px solid rgba(0,0,0,.06)", flex: "0 0 148px" } })
             : React.createElement("div", { style: { width: 148, height: 148, borderRadius: 8, border: "1px dashed rgba(0,0,0,.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, opacity: 0.6, flex: "0 0 148px", textAlign: "center", padding: 8 } },
                 pairValue.loading ? makeT(currentLang())("正在生成二维码…", "Generating QR…") : makeT(currentLang())(makeT(currentLang())("二维码不可用", "QR unavailable"), "QR unavailable")),
           React.createElement("div", { style: { flex: "1 1 220px", minWidth: 0 } },
             React.createElement("div", { style: { fontSize: 11, opacity: 0.55, marginBottom: 2 } }, makeT(currentLang())("剩余有效时间", "Time remaining")),
-            React.createElement("div", { style: { fontSize: 20, fontWeight: 600, color: "#147A5E", marginBottom: 10 } }, remaining + "s"),
+            React.createElement("div", { style: { fontSize: 20, fontWeight: 600, color: remaining > 0 ? "#147A5E" : "#b45309", marginBottom: 10 } },
+              remaining > 0 ? remaining + "s" : makeT(currentLang())("已过期", "Expired")),
             React.createElement("div", { style: { fontSize: 11, opacity: 0.55, marginBottom: 2 } }, makeT(currentLang())("固定地址", "Fixed address")),
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 } },
               React.createElement("div", { style: { fontSize: 12.5, wordBreak: "break-all", flex: "1 1 170px", minWidth: 0 } }, ((status && (status.address || status.httpsUrl)) || (loading ? makeT(currentLang())("检测中…", "Checking…") : makeT(currentLang())("当前方式还没有地址", "No address for this mode yet")))),
