@@ -62,7 +62,12 @@ struct ProcessRow: View {
                         .font(.caption2.weight(.semibold))
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                         .frame(width: 16, height: 16)
-                    Text(summary).font(.footnote).lineLimit(2)
+                    // 固定一行：summary 在「正在运行命令… · N 步」和
+                    // 「过程 · N 步 · A、B、C」之间切换，文字长度差别很大。
+                    // 用 lineLimit(2) 时它会在一行和两行之间跳，下面的内容被顶着上下动，
+                    // 看起来就是「过程那一行插入了一半又没插入」（真机反馈）。
+                    // 截断由尾部省略承担，宁可省略也不要让高度变。
+                    Text(summary).font(.footnote).lineLimit(1)
                         .foregroundStyle(runningStep == nil && !isCurrentGroupRunning
                                          ? .secondary : PocketChrome.brandText)
                     if runningStep != nil || isCurrentGroupRunning {
@@ -138,5 +143,6 @@ struct ProcessRow: View {
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .layoutDebug("L1")
     }
 }

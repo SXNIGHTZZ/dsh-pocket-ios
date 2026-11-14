@@ -186,7 +186,9 @@ struct MessageRow: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(L10n.t("引用这条消息"))
                 }
-            }.font(.caption2.weight(.semibold))
+            }
+            .font(.caption2.weight(.semibold))
+            .layoutDebug("L2")
             HStack {
                 if message.isUser { Spacer(minLength: 44) }
                 VStack(alignment: .leading, spacing: 8) {

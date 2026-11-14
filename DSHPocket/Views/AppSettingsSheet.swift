@@ -86,6 +86,30 @@ struct AppSettingsSheet: View {
                         Text(L10n.t("完成提醒"))
                     }
                 }
+                Section(L10n.t("调试")) {
+                    Toggle(isOn: Binding(
+                        get: { LayoutDebug.enabled },
+                        set: { LayoutDebug.enabled = $0 }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L10n.t("布局调试模式"))
+                            Text(L10n.t("给关键组件画红框并标编号，方便沟通间距"))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    ForEach(LayoutDebug.entries) { entry in
+                        HStack(spacing: 8) {
+                            Text(entry.id)
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.red)
+                                .frame(width: 22, alignment: .leading)
+                            Text(entry.name).font(.footnote)
+                            Spacer(minLength: 0)
+                            Text(entry.spacing).font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 Section("DSH Pocket") {
                     HStack {
                         Text(L10n.t("版本"))
