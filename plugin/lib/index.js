@@ -687,7 +687,17 @@ export function apply(ctx) {
           // 之前生成的是 `${base}/?pair=`，代理会把它当普通请求转发给 DSH，
           // DSH 不认识 ?pair 参数 → 返回 401 → App 显示「无法到达电脑」。
           // 配对逻辑（校验 token、换 cookie）在 `${CHANNEL}/pair` 里（2026-11-15 定位）。
-          const pairURL = `${base}${CHANNEL}/pair?token=${encodeURIComponent(pairToken)}`
+          // **App 的契约：根路径 + `?pair=`**，路径由 App 自己拼。
+          // 见 ConnectionModel+Connect.swift：
+          //   1. 从 URL 取 `?pair=` 的值
+          //   2. POST 到 `url.appending(path: "dsh-pocket-ios/pair")`，body 用 `token=`
+          //   3. 检查是否拿到 `dsh-auth*` cookie
+          //
+          // 所以这里必须给 `${base}/?pair=`：
+          //   - 写成 `${base}${CHANNEL}/pair?...` → App 会 append 成双路径
+          //   - 参数写成 `?token=` → App 会走 DSH launchToken 分支（那个每次重启都变，
+          //     必然「sign in link 过期」）
+          const pairURL = `${base}/?pair=${encodeURIComponent(pairToken)}`
           const qr = await QRCode.toDataURL(pairURL, { margin: 1, width: 360 })
           await logLine('pair token created')
           send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value: { url: pairURL, qr, expiresIn: 300 } } })
