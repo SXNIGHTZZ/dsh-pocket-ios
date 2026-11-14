@@ -103,7 +103,7 @@ struct AppSettingsSheet: View {
                                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(.red)
                                 .frame(width: 22, alignment: .leading)
-                            Text(entry.name).font(.footnote)
+                            Text(L10n.t(entry.name)).font(.footnote)
                             Spacer(minLength: 0)
                             Text(entry.spacing).font(.caption2).foregroundStyle(.secondary)
                         }

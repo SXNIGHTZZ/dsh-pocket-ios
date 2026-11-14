@@ -112,6 +112,7 @@ struct ConnectedView: View {
     private var searchBar: some View {
         HStack(spacing: 8) {
             TextField(L10n.t("搜索会话"), text: $searchText)
+                .layoutDebug("S9", text: LayoutDebug.font(.body))
                 .focused($searchFocused)
                 .submitLabel(.search)
                 .autocorrectionDisabled()
@@ -170,9 +171,11 @@ struct ConnectedView: View {
             }
             if model.sessionStore.sessions.isEmpty && !model.sessionStore.isLoadingSessions {
                 ContentUnavailableView(L10n.t("还没有会话"), systemImage: "bubble.left.and.bubble.right", description: Text(L10n.t("创建会话后即可开始对话。")))
+                    .layoutDebug("S10")
                     .listRowSeparator(.hidden)
             } else if filteredGroups.isEmpty && !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 ContentUnavailableView(L10n.t("没有匹配的会话"), systemImage: "magnifyingglass", description: Text(L10n.t("换个词再搜。")))
+                    .layoutDebug("S10")
                     .listRowSeparator(.hidden)
             }
             ForEach(filteredGroups) { group in
@@ -187,18 +190,22 @@ struct ConnectedView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .textCase(nil)
+                                .layoutDebug("S3", text: LayoutDebug.font(.caption))
                             if isCollapsed(group.id) {
                                 Text("\(group.sessions.count)")
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
+                                    .layoutDebug("S5", text: LayoutDebug.font(.caption2))
                             }
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.down")
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.tertiary)
                                 .rotationEffect(.degrees(isCollapsed(group.id) ? -90 : 0))
+                                .layoutDebug("S4", text: LayoutDebug.font(.caption2))
                         }
                         .contentShape(Rectangle())
+                        .layoutDebug("S1", text: LayoutDebug.font(.caption))
                     }
                     .buttonStyle(.plain)
                     .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 0, trailing: 16))
@@ -225,9 +232,11 @@ struct ConnectedView: View {
                         Image(systemName: session.running ? "ellipsis.bubble.fill" : (finishedAwaiting ? "bell.badge.fill" : "bubble.left"))
                             .foregroundStyle(session.running ? .green : (finishedAwaiting ? .red : .secondary))
                             .frame(width: 28)
+                            .layoutDebug("S2")
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 5) {
                                 Text(session.displayTitle).font(.body.weight(.medium)).foregroundStyle(.primary).lineLimit(2)
+                                    .layoutDebug("S7", text: LayoutDebug.font(.body))
                                 if isPinned {
                                     Image(systemName: "pin.fill")
                                         .font(.caption2)
@@ -238,6 +247,7 @@ struct ConnectedView: View {
                             Text(finishedAwaiting ? L10n.t("已完成，等待你的回复")
                                  : (session.running ? L10n.t("正在运行") : L10n.t("对话记录")))
                                 .font(.caption)
+                                .layoutDebug("S8", text: LayoutDebug.font(.caption))
                                 .foregroundStyle(finishedAwaiting ? Color.red : .secondary)
                                 .lineLimit(1)
                         }

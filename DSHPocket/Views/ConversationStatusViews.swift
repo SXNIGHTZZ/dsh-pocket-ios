@@ -73,6 +73,7 @@ struct ConversationActivityBar: View {
                     ProgressView().scaleEffect(0.6).frame(width: 12, height: 12)
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text("\(L10n.t("深度求索中")) · \(elapsed(since: model.turnStartedAt, now: context.date))")
+                            .layoutDebug("C11", text: LayoutDebug.font(.footnote))
                             .font(.caption)
                             .foregroundStyle(PocketChrome.brandText)
                             .monospacedDigit()
