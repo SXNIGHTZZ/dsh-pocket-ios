@@ -351,6 +351,7 @@ extension ConnectionModel {
     }
 
     /// 装配问答卡的依赖（幂等，RootView onAppear 调用）。
+    @MainActor
     func installQuestionProviders() {
         guard questionInbox.providers == nil else { return }
         questionInbox.providers = QuestionInbox.Providers(
@@ -361,8 +362,23 @@ extension ConnectionModel {
                 return try self.rpcClient
             },
             record: { @MainActor [weak self] message in self?.recordDiagnostic(message) },
-            reportError: { @MainActor [weak self] message in self?.conversationError = message }
+            reportError: { @MainActor [weak self] message in self?.conversationError = message },
+            sendRemoteResult: { @MainActor [weak self] clientId, eventId, value in
+                await self?.sendRemoteEventResult(clientId: clientId, eventId: eventId, value: value)
+            }
         )
+        // 顺带启动 `$events` 通道（幂等）：手机端要能直接回答问答卡，就必须走这条通道。
+        startRemoteEvents()
+    }
+
+    /// 启动 `$events` 通道（幂等）。
+    @MainActor
+    func startRemoteEvents() {
+        guard remoteEventsTask == nil else { return }
+        remoteEventsTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runRemoteEvents()
+        }
     }
 
     @MainActor

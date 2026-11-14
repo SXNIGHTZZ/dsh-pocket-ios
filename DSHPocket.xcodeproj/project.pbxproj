@@ -71,6 +71,7 @@
 		22CEEF6086235C79AF9AFB38 /* ConnectionModel+Demo.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC99A85848E67A75443E856D /* ConnectionModel+Demo.swift */; };
 		CD7E0C3CD0CBAE04D3964B67 /* ConnectionModel+Endpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = 242403103FB8583539EEB2D7 /* ConnectionModel+Endpoints.swift */; };
 		9417459881C5659629CA6ABE /* ConnectionModel+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC44131D5A668ACDC44E3CB5 /* ConnectionModel+Live.swift */; };
+		9417459881C5659629CA6ABF /* ConnectionModel+RemoteEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC44131D5A668ACDC44E3CB6 /* ConnectionModel+RemoteEvents.swift */; };
 		871C0E9C3C3EC63214273F80 /* ConnectionModel+Outbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6378B96DD5FA996F488CC21 /* ConnectionModel+Outbox.swift */; };
 		08ED7D938D09290116B20148 /* ConnectionModel+Process.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20280E2180654BDE8E6EA59 /* ConnectionModel+Process.swift */; };
 		84E2D69CA26EBFB06B005EEF /* ConnectionModel+Sessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46FE7D1E81312808CF97AB49 /* ConnectionModel+Sessions.swift */; };
@@ -174,6 +175,7 @@
 		DC99A85848E67A75443E856D /* ConnectionModel+Demo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionModel+Demo.swift"; sourceTree = "<group>"; };
 		242403103FB8583539EEB2D7 /* ConnectionModel+Endpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionModel+Endpoints.swift"; sourceTree = "<group>"; };
 		DC44131D5A668ACDC44E3CB5 /* ConnectionModel+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionModel+Live.swift"; sourceTree = "<group>"; };
+		DC44131D5A668ACDC44E3CB6 /* ConnectionModel+RemoteEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionModel+RemoteEvents.swift"; sourceTree = "<group>"; };
 		A6378B96DD5FA996F488CC21 /* ConnectionModel+Outbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionModel+Outbox.swift"; sourceTree = "<group>"; };
 		F20280E2180654BDE8E6EA59 /* ConnectionModel+Process.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionModel+Process.swift"; sourceTree = "<group>"; };
 		46FE7D1E81312808CF97AB49 /* ConnectionModel+Sessions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionModel+Sessions.swift"; sourceTree = "<group>"; };
@@ -309,6 +311,7 @@
 				DC99A85848E67A75443E856D /* ConnectionModel+Demo.swift */,
 				242403103FB8583539EEB2D7 /* ConnectionModel+Endpoints.swift */,
 				DC44131D5A668ACDC44E3CB5 /* ConnectionModel+Live.swift */,
+				DC44131D5A668ACDC44E3CB6 /* ConnectionModel+RemoteEvents.swift */,
 				A6378B96DD5FA996F488CC21 /* ConnectionModel+Outbox.swift */,
 				F20280E2180654BDE8E6EA59 /* ConnectionModel+Process.swift */,
 				D1CFA11E0000000000000043 /* ConnectionModel+Workspaces.swift */,
@@ -588,6 +591,7 @@
 				22CEEF6086235C79AF9AFB38 /* ConnectionModel+Demo.swift in Sources */,
 				CD7E0C3CD0CBAE04D3964B67 /* ConnectionModel+Endpoints.swift in Sources */,
 				9417459881C5659629CA6ABE /* ConnectionModel+Live.swift in Sources */,
+				9417459881C5659629CA6ABF /* ConnectionModel+RemoteEvents.swift in Sources */,
 				871C0E9C3C3EC63214273F80 /* ConnectionModel+Outbox.swift in Sources */,
 				08ED7D938D09290116B20148 /* ConnectionModel+Process.swift in Sources */,
 				84E2D69CA26EBFB06B005EEF /* ConnectionModel+Sessions.swift in Sources */,

@@ -98,6 +98,31 @@ public final class DSHClient: @unchecked Sendable {
         return try RPCRequest.value(from: data)
     }
 
+    /// 回传 `$events` 请求的处理结果。
+    ///
+    /// 路径是 `/api/$events/result`（浏览器端同样是 `rpc.call('/api', '$events/result', ...)`）。
+    /// 不能用 `appendingPathComponent`——它会把 `$` 转义掉。
+    public func remoteEventResult(_ body: [String: Any],
+                                  timeout: TimeInterval = 20) async throws {
+        guard let url = URL(string: baseURL.absoluteString
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .appending("/api/\(RemoteEventProtocol.resultEndpoint)")) else {
+            throw DSHError.invalidPayload
+        }
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = timeout
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try RPCRequest(method: RemoteEventProtocol.resultEndpoint,
+                                             args: body).encoded()
+        let (data, http) = try await self.http.data(for: urlRequest)
+        if let error = DSHError.from(status: http.statusCode,
+                                     message: String(data: data, encoding: .utf8)) {
+            throw error
+        }
+        try RPCRequest.ok(from: data)
+    }
+
     /// 命令式 RPC：只确认服务端接受了，**不解析返回体**。
     ///
     /// 用于 `userQuestions/answer` 这类「做完就行」的接口——它们的 `value`

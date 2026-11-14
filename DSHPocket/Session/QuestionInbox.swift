@@ -23,7 +23,21 @@ final class QuestionInbox {
         var record: (String) -> Void
         /// 回答失败时把错误展示给用户。
         var reportError: (String) -> Void
+        /// 走 `$events` 通道回传答案（provider 路径，点完立即生效）。
+        var sendRemoteResult: (String, String, Any?) async -> Void
     }
+
+    /// 服务端通过 `$events` 通道推来的问答请求。
+    ///
+    /// 这条通道是浏览器端的做法：收到请求后直接把答案作为请求结果回传，
+    /// 不走 `userQuestions/answer`（那个要求问题已进入 continued 状态，
+    /// 而等待期间它一直是 open，所以点必然被拒）。
+    struct ProviderRequest: Equatable {
+        let clientId: String
+        let eventId: String
+    }
+
+    private(set) var pendingProviderRequest: ProviderRequest?
 
     var providers: Providers?
 
@@ -37,6 +51,25 @@ final class QuestionInbox {
               let payload = PendingQuestionPayload.decode(callId: callId, arguments: arguments) else { return }
         conversation.pendingQuestion = PendingUserQuestion(payload: payload)
         conversation.pendingQuestionTurn = turn
+    }
+
+    /// 收到 `$events` 的问答请求：记下回传所需的关联信息。
+    ///
+    /// 卡片本身仍由 step 事件（`tool/call`）驱动显示——两边的 callId 是一致的，
+    /// 这里只负责「答案该往哪条通道回传」。
+    @MainActor
+    func receiveProviderRequest(clientId: String, eventId: String, args: [String: Any]) {
+        pendingProviderRequest = ProviderRequest(clientId: clientId, eventId: eventId)
+        if let callId = args["callId"] as? String {
+            providers?.record("问答通道：已关联请求 callId=\(callId.prefix(12))")
+        }
+    }
+
+    /// 服务端撤销了请求（比如电脑端先答了）。
+    @MainActor
+    func cancelProviderRequest(eventId: String) {
+        guard pendingProviderRequest?.eventId == eventId else { return }
+        pendingProviderRequest = nil
     }
 
     /// 电脑端已经给出结果，或本机刚提交了回答。
@@ -75,6 +108,19 @@ final class QuestionInbox {
             "callId": request.callId,
             "answer": ["answers": answers]
         ]
+        // provider 路径优先：服务端正等着 `$events` 这条请求的结果，
+        // 回传后 agent 当场就能收到答案，不需要等 120 秒超时。
+        if let provider = pendingProviderRequest {
+            pendingProviderRequest = nil
+            Task { @MainActor [weak self] in
+                guard let self, let providers = self.providers else { return }
+                providers.record("回答用户问题（provider 通道）：\(request.callId)")
+                await providers.sendRemoteResult(provider.clientId, provider.eventId,
+                                                 ["answers": answers])
+                self.noteSettled(callId: request.callId)
+            }
+            return
+        }
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
