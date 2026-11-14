@@ -134,40 +134,56 @@ struct ConversationView: View {
             ConversationStatusBanner(model: model)
 
             ScrollViewReader { proxy in
-                ScrollView {
-                    // 用 VStack：消息已在数据层硬裁到 24 条（见 retainedMessageLimit），
-                    // 全量布局的成本可忽略。LazyVStack 反而有害——它会缓存行高，
-                    // 而 Markdown 行是动态高度，滚动时高度重算会导致内容「来回跳」（真机实测）。
-                    VStack(spacing: 0) {
-                        Color.clear.frame(height: 1).id(Self.topAnchorID)
-                        if model.isLoadingOlder {
-                            HStack(spacing: 6) {
-                                ProgressView().scaleEffect(0.7)
-                                Text(L10n.t("加载更早消息…")).font(.caption).foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 2)
+                // 用 List 而不是 ScrollView+LazyVStack：List 底层是 UICollectionView，
+                // 会真正回收滚出屏幕的 cell（LazyVStack 只延迟创建、不回收，实测 400 条吃到 1.4GB）。
+                // 这是微信/Telegram 那一类聊天 App 的标准做法。
+                // 需要把 List 的默认样式全部去掉（分隔线、内边距、行背景），否则气泡之间会出现灰线。
+                // List 版本：把「顶部锚点 / 加载提示 / 空态 / 每行消息 / 底部锚点」
+                // 全部做成**独立的 list row**，这样滚出屏幕的行会被 UICollectionView 真正回收。
+                // 关键：不能像 VStack 那样把所有内容套在一个容器里——那样整个容器是一个 cell，等于没回收。
+                List {
+                    // 顶部锚点
+                    Color.clear.frame(height: 1).id(Self.topAnchorID)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+
+                    if model.isLoadingOlder {
+                        HStack(spacing: 6) {
+                            ProgressView().scaleEffect(0.7)
+                            Text(L10n.t("加载更早消息…")).font(.caption).foregroundStyle(.secondary)
                         }
-                        if model.isLoadingConversation && model.messages.isEmpty && model.steps.isEmpty {
-                            ProgressView().padding(.top, 36)
-                        }
-                        // 切换完成前不要显示空态，否则会闪一下「开始对话」。
-                        if entries.isEmpty && !model.isLoadingConversation, isSwitchedToSession {
-                            ContentUnavailableView(L10n.t("开始对话"), systemImage: "text.bubble", description: Text(L10n.t("发送第一条消息。")))
-                        }
-                        ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                            let topGap = index == 0 ? 0 : Self.messageSpacing(previous: entries[index - 1], current: entry)
+                        .frame(maxWidth: .infinity)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                    }
+                    if model.isLoadingConversation && model.messages.isEmpty && model.steps.isEmpty {
+                        ProgressView()
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    }
+                    if entries.isEmpty && !model.isLoadingConversation, isSwitchedToSession {
+                        ContentUnavailableView(L10n.t("开始对话"), systemImage: "text.bubble", description: Text(L10n.t("发送第一条消息。")))
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    }
+
+                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                        let topGap = index == 0 ? 0 : Self.messageSpacing(previous: entries[index - 1], current: entry)
+                        Group {
                             if let message = entry.message {
-                                MessageRow(message: message, model: model).id(entry.id).padding(.top, topGap)
+                                MessageRow(message: message, model: model)
                             } else if let failure = entry.failure {
-                                TurnFailureRow(failure: failure).id(entry.id).padding(.top, topGap)
+                                TurnFailureRow(failure: failure)
                             } else if let group = entry.group {
                                 ProcessRow(group: group, expanded: expandedGroupIDs.contains(group.id), loading: loadingGroupIDs.contains(group.id), model: model) {
                                     let plan = ProcessTogglePlan.make(
                                         isExpanded: expandedGroupIDs.contains(group.id),
                                         needsDetails: group.steps.contains { !$0.detailsLoaded }
                                     )
-                                    // 展开会把这一行撑高。滚不滚、要不要拉正文，由 ProcessTogglePlan 决定。
                                     if !plan.followLatest { followsLatest = false }
                                     scrollGeneration &+= 1
                                     if plan.suppressAutoScroll > 0 {
@@ -192,23 +208,27 @@ struct ConversationView: View {
                                             proxy.scrollTo(group.id, anchor: .top)
                                         }
                                     }
-                                }.id(entry.id).padding(.top, topGap)
+                                }
                             }
                         }
-                        // 底部锚点：滚动到它比"最后一条消息"更可靠（能带上后面的过程行/占位）。
-                        // 底部留白：滚动是把这个锚点贴到视口底部，所以留白必须长在锚点自己身上。
-                        // 靠外层 padding 会被滚出屏幕，视觉上就是最后一条消息贴着输入栏（踩过）。
-                        Color.clear.frame(height: Self.bottomBreathingRoom).id(Self.bottomAnchorID)
+                        .id(entry.id)
+                        .padding(.top, topGap)
+                        .padding(.horizontal)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                     }
-                    .padding()
-                    .frame(maxWidth: 720)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(key: ConversationHeightKey.self, value: geo.size.height)
-                        }
-                    )
+
+                    // 底部锚点（带呼吸留白）
+                    Color.clear.frame(height: Self.bottomBreathingRoom).id(Self.bottomAnchorID)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                 }
+                .listStyle(.plain)
+                .environment(\.defaultMinListRowHeight, 0)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
                 .onPreferenceChange(ConversationHeightKey.self) { _ in
                     // 行高异步变化（Textual 表格/图片晚渲染）会让内容变高；只要仍在跟随最新，
                     // 就补一次贴底，避免"最后一条消息下方留出空白"。

@@ -64,9 +64,8 @@ extension ConnectionModel {
         sessionStore.selected = session
         messages = Self.demoMessages(for: session.sessionId)
         steps = Self.demoSteps(for: session.sessionId)
-        // 演示模式仍设上限：压测数据（DSH_STRESS=messages:400）会造 800 条，
-        // 不裁会直接吃 1.5 GB。真实连接不走这里，用户路径不受影响。
-        conversation.trimMessages(to: Self.inSessionMessageLimit)
+        // 不裁：List 会回收滚出屏幕的 cell（实测 400 轮只占 389 MB）。
+        // 之前裁是因为 VStack 不回收（会到 1.5 GB），换 List 后这个理由不存在了。
         isTurnRunning = session.running
         turnStartedAt = session.running ? Date().addingTimeInterval(-37) : nil
         isLoadingConversation = false
