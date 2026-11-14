@@ -152,6 +152,7 @@ extension ConnectionModel {
     /// 请求更早一页历史（滚动到顶部附近时调用）。
     @MainActor
     func loadOlderMessages() {
+        // hasMoreOlder 恒为 false（产品只保留最近 30 条），这里保留 guard 作为双保险。
         guard !isDemoMode, !isLoadingOlder, hasMoreOlder,
               let coordinator = activeConversation?.coordinator,
               let oldest = messages.min(by: { $0.sequence < $1.sequence }) else { return }
@@ -180,16 +181,17 @@ extension ConnectionModel {
             recordLiveFrameArrival()
             mergeMessages(dshMessages.map(Self.pocketMessage(from:)))
             for step in dshSteps { applyDSHStep(step, historical: true) }
-            hasMoreOlder = hasMore
+            // 产品决策：只保留最近 30 条（约 15 轮），**不提供往上翻更早历史**。
+            // 所以服务端说 hasMore 也一律关掉——分页触发条件里 hasMoreOlder 是硬门槛，
+            // 关掉后上滑不会再请求，也就不会出现「加载了又被裁」的来回拉扯。
+            hasMoreOlder = false
             isLoadingConversation = false
-            // 快照是「最近的一批」，保最新（裁最旧）。
             activeConversation?.trimMessages(to: Self.inSessionMessageLimit)
             noteLoadFinished(source: "snapshot", conversation: conversation)
         case .messages(let dshMessages):
             let beforeCount = messages.count
             mergeMessages(dshMessages.map(Self.pocketMessage(from:)))
             isLoadingConversation = false
-            let wasLoadingOlder = isLoadingOlder
             if isLoadingOlder {
                 isLoadingOlder = false
                 olderLoadTick += 1
@@ -200,13 +202,10 @@ extension ConnectionModel {
                     conversation.olderLoadLastResult = "ok +\(conversation.olderLoadLastAdded)"
                 }
             }
-            // 按来源决定裁剪方向：上滑加载保历史（裁最新），其余保最新（裁最旧）。
+            // 只保留最近 N 条（保最新、裁最旧）。
+            // 不再区分方向：已经关闭分页，不存在「上滑加载更早的」这条路径了。
             if let conversation = activeConversation {
-                if wasLoadingOlder {
-                    conversation.trimNewestMessages(keeping: Self.inSessionMessageLimit)
-                } else {
-                    conversation.trimMessages(to: Self.inSessionMessageLimit)
-                }
+                conversation.trimMessages(to: Self.inSessionMessageLimit)
             }
         case .hasMore(let more):
             hasMoreOlder = more
