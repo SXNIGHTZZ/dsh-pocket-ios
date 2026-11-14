@@ -37,6 +37,9 @@ struct ConversationView: View {
     @State private var loadingGroupIDs: Set<String> = []
     /// 展开/收起「过程」后短时间内抑制"自动贴底"，避免一点击就被拽到底部。
     @State private var suppressAutoScrollUntil = Date.distantPast
+    /// 自动贴底的最小间隔：行高变化会连着触发好几次（消息追加 → 过程行插入 →
+    /// Markdown 异步渲染完成），每次都 scrollTo 就是用户看到的「发送时抖一下」。
+    @State private var lastAutoScrollAt = Date.distantPast
     /// 手指正在拖动列表。拖动期间一律不自动贴底，否则用户上滑会被按住。
     @State private var userDragging = false
     /// 这次拖动的方向。往上带就要立刻停止跟随，不能因为还贴着底又把跟随打开。
@@ -216,6 +219,12 @@ struct ConversationView: View {
                     guard Date() >= suppressAutoScrollUntil else { return }
                     guard !userDragging else { return }
                     guard followsLatest else { return }
+                    // 节流：一次发送会连着触发 3 次左右的高度变化（消息追加、过程行插入、
+                    // Markdown 渲染完成）。不节流就是连续三次 scrollTo，视觉上就是「抖一下」。
+                    // 120ms 足够让最后那次高度变化也能被追上。
+                    let now = Date()
+                    guard now.timeIntervalSince(lastAutoScrollAt) >= 0.12 else { return }
+                    lastAutoScrollAt = now
                     DispatchQueue.main.async {
                         proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
                     }
