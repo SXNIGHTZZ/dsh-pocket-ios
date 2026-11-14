@@ -187,10 +187,12 @@ struct ConnectedView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Text(group.title)
-                                .font(.caption.weight(.semibold))
+                                // 原来是 .caption（12pt），真机看着偏小；升到 .subheadline（15pt）。
+                                // 用语义字号而不是 .system(size:15)，跟随用户字号设置。
+                                .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .textCase(nil)
-                                .layoutDebug("S3", text: LayoutDebug.font(.caption))
+                                .layoutDebug("S3", text: LayoutDebug.font(.subheadline))
                             if isCollapsed(group.id) {
                                 Text("\(group.sessions.count)")
                                     .font(.caption2)
@@ -258,6 +260,9 @@ struct ConnectedView: View {
                             Circle().fill(.red).frame(width: 7, height: 7)
                         }
                     }
+                    // S6 = 会话行整体。行高 = 标题 + 状态两行 + 上下各 7pt；
+                    // 觉得「某一类会话行偏高」时报 S6 就能定位。
+                    .layoutDebug("S6", gap: "上下 7pt", text: LayoutDebug.font(.body))
                     // 行高：标题 + 状态两行本身约 42 点，上下各留 7 点 → 约 56 点。
                     // 不再吃 List 默认的上下各 11 点（那样会到 68 点左右，显得松）。
                     // 大字号下高度仍随文字自动长，不写死。

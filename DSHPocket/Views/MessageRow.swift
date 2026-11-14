@@ -147,7 +147,8 @@ struct MessageRow: View {
 
     var body: some View {
         VStack(alignment: message.isUser ? .trailing : .leading, spacing: 8) {
-            HStack(spacing: 8) {
+            // 8 → 4：真机反馈消息头里图标之间偏散。
+            HStack(spacing: 4) {
                 if !message.isUser {
                     Image(systemName: "sparkle").foregroundStyle(PocketChrome.brandText)
                         .layoutDebug("C6", gap: "8pt", text: LayoutDebug.font(.caption2))
@@ -173,7 +174,9 @@ struct MessageRow: View {
                             .scaleEffect(copied ? 1.15 : 1)
                             .animation(PocketMotion.animation(.spring(response: 0.22, dampingFraction: 0.6)), value: copied)
                             // 图标本身 14pt，补到 44pt 的可点区域，手抖也能点中。
-                            .frame(minWidth: 44, minHeight: 44)
+                            // 44 → 32：可点区仍然够（HIG 建议 44，但这里图标很小、
+                            // 相邻按钮之间还有间距），视觉高度能明显收紧。
+                            .frame(minWidth: 32, minHeight: 32)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -186,7 +189,9 @@ struct MessageRow: View {
                             .font(.caption2.weight(.medium))
                             .layoutDebug("C9", text: "14pt 图标")
                             .foregroundStyle(.secondary)
-                            .frame(minWidth: 44, minHeight: 44)
+                            // 44 → 32：可点区仍然够（HIG 建议 44，但这里图标很小、
+                            // 相邻按钮之间还有间距），视觉高度能明显收紧。
+                            .frame(minWidth: 32, minHeight: 32)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)

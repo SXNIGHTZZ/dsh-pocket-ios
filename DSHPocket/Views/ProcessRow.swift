@@ -140,7 +140,8 @@ struct ProcessRow: View {
             }
         }
         .animation(PocketMotion.animation(PocketMotion.disclosure), value: expanded)
-        .padding(.vertical, 12)
+        // 12 → 8：真机反馈这一行偏高，收紧后与消息的节奏更接近。
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .layoutDebug("C1", gap: "7pt", text: LayoutDebug.font(.footnote))

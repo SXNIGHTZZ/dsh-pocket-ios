@@ -118,19 +118,23 @@ private struct LayoutDebugModifier: ViewModifier {
     func body(content: Content) -> some View {
         if LayoutDebug.enabled {
             content
+                // ⚠️ `allowsHitTesting(false)` 必须加在**每个 overlay 内部**，
+                // 不能加在整条视图链上——那样连 content 本身都点不动了。
+                // 真机踩过：加在链上之后分组头展不开、复制按钮点不了。
                 .overlay {
                     Rectangle()
                         .strokeBorder(Color.red.opacity(0.75), lineWidth: 0.5)
+                        .allowsHitTesting(false)
                 }
-                .overlay(alignment: .topLeading) { badge(id) }
+                .overlay(alignment: .topLeading) {
+                    badge(id).allowsHitTesting(false)
+                }
                 .overlay(alignment: .topTrailing) {
-                    if let text { badge(text) }
+                    if let text { badge(text).allowsHitTesting(false) }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    if let gap { badge(gap) }
+                    if let gap { badge(gap).allowsHitTesting(false) }
                 }
-                // 描边和信息层绝对不能吃掉点击：开着调试模式时仍要能点复制、展开过程。
-                .allowsHitTesting(false)
         } else {
             content
         }
