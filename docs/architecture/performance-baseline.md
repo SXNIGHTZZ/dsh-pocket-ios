@@ -45,9 +45,10 @@
 | `sessions:800` | **37.8 MB** | 277 MB | — | 列表页，800 个会话 |
 | `images:120` | **56.6 MB** | 307 MB | 图片解码缓存 | 240 条消息全带图，裁到 24 条 |
 | `steps:80` | **62.3 MB** | 319 MB | 富文本布局 | 每轮 80 个步骤，默认折叠 |
-| `markdown:code:950` | **100.1 MB** | 381 MB | **CoreAnimation 43.3 MB** | 950 行代码块（不崩了）；Malloc 只有 18 MB |
+| `markdown:code:950` | **61.6 MB** ✅ | 381 MB | — | 950 行代码块；**折叠后**（只渲染前 200 行）从 100.1 MB 降下来 |
 | `messages:400` | **121.5 MB** | 400 MB | 富文本布局 | 800 条裁到 24 条后 |
-| `markdown:extreme` | **180.9 MB** | 466 MB | 表格 + 代码块叠加 | 100 行 × 8 列表格 + 500 行代码块 |
+| `markdown:extreme` | **180.9 MB** | 466 MB | 表格 + 代码块叠加 | 100 行 × 8 列表格 + 500 行代码块（**折叠前**） |
+| `messages:28,steps:134,table:100` | **85.9 MB** ✅ | — | — | 同上组合；**折叠后**从 166.5 MB 降下来 |
 
 **未复测的场景**（仍只有 RSS，下次用 `dsh-ios-mem` 补 footprint）：
 `markdown:code:2000` 456 MB · `markdown:codeplain:950` 382 MB · `markdown:text:950` 593 MB · `markdown:singleline:950` 381 MB
@@ -56,7 +57,17 @@
 
 **最大风险是极端 Markdown**（footprint 180.9 MB）——大表格 + 长代码块的布局成本远高于消息数量本身。
 
-**`code:950` 的成本结构值得单独记一笔**：100 MB 里 43.3 MB 是 CoreAnimation
+**折叠的实测收益**（2026-11-14，同场景同模拟器）：
+
+| 场景 | 折叠前 | 折叠后 | 降幅 |
+| --- | --- | --- | --- |
+| `markdown:code:950` | 100.1 MB | **61.6 MB** | **−38%** |
+| `messages:28,steps:134,table:100` | 166.5 MB | **85.9 MB** | **−48%** |
+
+规则：表格 > 30 行、代码块 > 200 行时只渲染前 N 行，正文下方给「展开全部」。
+实现见 `DSHKit/UI/MarkdownTruncation.swift` 与 spec/2026-11-14-1700。
+
+**`code:950` 的成本结构值得单独记一笔**：折叠前的 100 MB 里 43.3 MB 是 CoreAnimation
 （19 个 region），Malloc 只有 18 MB。原因是 Textual 把整段代码绘成**一个** `Text`，
 950 行 ⇒ 一个巨大的图层 backing store。**压缩文本不会降这块内存**，要降只能
 限制单块行数或分段渲染。
