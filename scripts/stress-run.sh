@@ -27,9 +27,8 @@ if ! xcrun simctl list devices booted | grep -q "$UDID"; then
 fi
 
 # 2) 找最新 Debug 包（排除 Index.noindex，那里面的包没有 bundle id）
-APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" \
-  -name "DSHPocket.app" -path "*Build/Products/Debug-iphonesimulator*" \
-  2>/dev/null | grep -v "Index.noindex" | head -1)
+# 按修改时间取最新包：直接 head -1 可能拿到旧 DerivedData 里的构建。
+APP=$(ls -td "$HOME"/Library/Developer/Xcode/DerivedData/*/Build/Products/Debug-iphonesimulator/DSHPocket.app 2>/dev/null | head -1)
 if [ -z "$APP" ]; then
   echo "找不到 Debug 包，先跑一次 xcodebuild build" >&2
   exit 1
