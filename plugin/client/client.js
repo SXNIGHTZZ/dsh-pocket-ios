@@ -190,7 +190,7 @@ window.__ModuleLoader__.load({
         : activeMode === "cloudflare"
         ? makeT(currentLang())("手机不用装任何东西，扫码直接连。适合局域网/临时使用。首次会自动下载约 20MB 的 cloudflared。", "Nothing to install on the phone — just scan. Best for LAN or temporary use. First run auto-downloads cloudflared (~20MB).")
         : activeMode === "easytier"
-          ? makeT(currentLang())("需要在 App Store（海外区）安装 EasyTier，约 $0.99，且要自己配网络名和密钥。适合会自建的技术用户。", "Requires EasyTier from an overseas App Store (~$0.99) plus your own network name and secret. For users who self-host.")
+          ? makeT(currentLang())("高级选项：电脑跑 EasyTier 自己组网，手机需装 WireGuard 客户端（Passepartout / AmneziaVPN）。Shadowrocket、Streisand 这类代理 App 不行——它们会把 10.14.14.x 当私有网段直连。", "Advanced: run EasyTier on the computer, and use a real WireGuard client on the phone (Passepartout / AmneziaVPN). Proxy apps like Shadowrocket or Streisand won't work — they bypass private subnets.")
           : makeT(currentLang())("手机和电脑都要装 Tailscale：App Store（海外区）可下载，免费；两端登录同一个账号即可。适合长期、多设备使用。", "Install Tailscale on both ends — free from an overseas App Store; sign in with the same account. Best for long-term, multi-device use.");
 
       return React.createElement("div", { style: { padding: 14, borderRadius: 12, border: "1px solid rgba(0,0,0,.08)" } },

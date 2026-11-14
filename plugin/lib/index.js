@@ -322,7 +322,7 @@ async function modeStatus() {
         state: 'needs-setup',
         error: '还没建 WireGuard 门户。在电脑终端执行下面的命令（需要 sudo），完成后点刷新。',
         command: cmd,
-        hint: '手机端请安装 WireGuard（不是 EasyTier）：导入配置后即可访问这台电脑。',
+        hint: '手机端需要能建 VPN 隧道的客户端（Passepartout / AmneziaVPN）。Shadowrocket、Streisand 这类代理 App 会把 10.14.14.x 当私有网段直连，用不了。',
       }
     }
 
@@ -344,7 +344,7 @@ async function modeStatus() {
       state: 'ready',
       error: null,
       config,
-      hint: `用手机上的 WireGuard 类客户端导入这份配置并启用，然后在 App 里连接 http://${virtualHost}:${PROXY_PORT}`,
+      hint: `用 WireGuard 客户端（Passepartout / AmneziaVPN）导入并启用，然后在 App 里连接 http://${virtualHost}:${PROXY_PORT}。代理类 App 不行。`,
     }
   }
 
