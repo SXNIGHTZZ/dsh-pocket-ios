@@ -145,7 +145,15 @@ extension ConnectionModel {
             if Task.isCancelled { break }
             guard activeConversation?.sessionId == session.sessionId,
                   sessionStore.selected?.sessionId == session.sessionId else { return }
-            let stalled = isTurnRunning && Date().timeIntervalSince(lastLiveFrameAt) > 15
+            // 假死判定**不能只在生成中生效**：
+            // 发消息时 isTurnRunning 往往还是 false，此时实时流若已假死，
+            // 既不会拉历史也不会重连，消息就卡在「发送中」直到 HTTP 重试跑完
+            // （真机实测：pending 1 卡了 50 秒，同期 Live Signal 显示 2 分钟无帧）。
+            let silentSeconds = Date().timeIntervalSince(lastLiveFrameAt)
+            let stalled = silentSeconds > 30
+            if stalled {
+                recordDiagnostic("实时流假死：\(Int(silentSeconds)) 秒无帧，尝试恢复")
+            }
             if !liveConnection.isConnected || stalled {
                 await loadHistory(session)
             }
