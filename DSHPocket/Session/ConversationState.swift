@@ -122,4 +122,21 @@ final class ConversationState {
         steps = steps.filter { $0.sequence >= oldestKept }
         turnFailures = turnFailures.filter { $0.sequence >= oldestKept }
     }
+
+    /// 保留**更早**的 N 条，裁掉最新的。
+    ///
+    /// 用于「用户上滑加载历史」之后：他正在看更早的内容，此时把最新消息卸载掉
+    /// 才不会把他刚拖动看到的那一段剪掉。
+    /// （如果一律裁最旧的，会出现「加载了 6 条 → 立刻又被裁掉 → 用户看不到」，
+    ///  诊断里表现为 Last load = ok +0。）
+    @MainActor
+    func trimNewestMessages(keeping limit: Int) {
+        guard messages.count > limit else { return }
+        let kept = Array(messages.prefix(limit))
+        let oldestKept = kept.first?.sequence ?? Int.min
+        let newestKept = kept.last?.sequence ?? Int.min
+        messages = kept
+        steps = steps.filter { $0.sequence >= oldestKept && $0.sequence <= newestKept }
+        turnFailures = turnFailures.filter { $0.sequence >= oldestKept && $0.sequence <= newestKept }
+    }
 }

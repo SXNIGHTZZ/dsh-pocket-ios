@@ -247,7 +247,9 @@ extension ConnectionModel {
         messages = (Array(bySequence.values) + pending).sorted { $0.sequence < $1.sequence }
         // 会话内允许上滑翻历史，所以不按「退出后保留量」裁；
         // 但仍有会话内上限，避免 400 轮那种情况把内存吃到 1.5 GB。
-        trimToInSessionLimit()
+        // 不在这里裁：裁剪方向取决于「这批消息是哪来的」——
+        // 上滑加载要保历史（裁最新），新消息/快照要保最新（裁最旧）。
+        // 统一在这里裁会先剪掉刚加载的更早消息（表现为 Last load = ok +0）。
         restoreMissingOutboxMessages()
         pruneStaleOutbox()
         timingLog("model_update incoming=\(incoming.count) total=\(messages.count)")

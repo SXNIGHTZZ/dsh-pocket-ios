@@ -182,11 +182,14 @@ extension ConnectionModel {
             for step in dshSteps { applyDSHStep(step, historical: true) }
             hasMoreOlder = hasMore
             isLoadingConversation = false
+            // 快照是「最近的一批」，保最新（裁最旧）。
+            activeConversation?.trimMessages(to: Self.inSessionMessageLimit)
             noteLoadFinished(source: "snapshot", conversation: conversation)
         case .messages(let dshMessages):
             let beforeCount = messages.count
             mergeMessages(dshMessages.map(Self.pocketMessage(from:)))
             isLoadingConversation = false
+            let wasLoadingOlder = isLoadingOlder
             if isLoadingOlder {
                 isLoadingOlder = false
                 olderLoadTick += 1
@@ -195,6 +198,14 @@ extension ConnectionModel {
                     conversation.olderLoadLastAdded = max(0, messages.count - beforeCount)
                     conversation.olderLoadLastAt = Date()
                     conversation.olderLoadLastResult = "ok +\(conversation.olderLoadLastAdded)"
+                }
+            }
+            // 按来源决定裁剪方向：上滑加载保历史（裁最新），其余保最新（裁最旧）。
+            if let conversation = activeConversation {
+                if wasLoadingOlder {
+                    conversation.trimNewestMessages(keeping: Self.inSessionMessageLimit)
+                } else {
+                    conversation.trimMessages(to: Self.inSessionMessageLimit)
                 }
             }
         case .hasMore(let more):
