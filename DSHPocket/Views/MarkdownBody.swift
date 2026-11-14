@@ -29,13 +29,21 @@ import UserNotifications
 struct MarkdownBody: View, Equatable {
     let text: String
     var foreground: Color = .primary
+    /// 用户是否点了「展开全部」。默认折叠超长内容。
+    @State private var expandAll = false
 
     static func == (lhs: MarkdownBody, rhs: MarkdownBody) -> Bool {
         lhs.text == rhs.text && lhs.foreground == rhs.foreground
     }
 
     var body: some View {
-        StructuredText(markdown: Self.strippingCodeLanguage(text))
+        // 超长的表格/代码块默认折叠：实测 100 行 × 8 列表格会把 footprint
+        // 从 56 MB 推到 166 MB（CoreAnimation 16.7 MB / 937 个图层）。
+        let truncated = expandAll
+            ? MarkdownTruncation.Result(markdown: text, omittedTableRows: 0, omittedCodeLines: 0)
+            : MarkdownTruncation.apply(to: text)
+        VStack(alignment: .leading, spacing: 6) {
+        StructuredText(markdown: Self.strippingCodeLanguage(truncated.markdown))
             .textual.textSelection(.enabled)
             // 标题、表格、行内代码统一在 ChatStructuredStyle 里配置。
             //
@@ -52,6 +60,18 @@ struct MarkdownBody: View, Equatable {
             // 必须放在 `structuredTextStyle(.gitHub)` 之后，否则被它内置的 inlineStyle 覆盖。
             .textual.inlineStyle(InlineStyle().code(.monospaced, .fontScale(0.94)))
             .foregroundStyle(foreground)
+
+            if truncated.didTruncate && !expandAll {
+                Button {
+                    expandAll = true
+                } label: {
+                    Text(L10n.tf("展开全部（另有 %d 行）", truncated.omittedTotal))
+                        .font(.footnote)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
