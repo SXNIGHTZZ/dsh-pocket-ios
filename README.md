@@ -161,25 +161,31 @@ plugin/                        # DSH 插件（dsh-pocket-ios）：设置页、�
 docs/qa-conversation-regression.md
 ```
 
-## 发布与归档
+## 发布
 
 ```bash
-# 改完 Info.plist 的版本号/build 后：
-./scripts/release.sh              # 打包 → 导出 ipa → 归档 → 上传 ASC
-./scripts/release.sh --no-upload  # 只打包归档
+# 改好 Info.plist 的版本号/build，提交所有改动后：
+./scripts/release.sh              # 打包 → 上传 → 打 tag
+./scripts/release.sh --no-upload  # 只打包验证，不上传也不打 tag
 ```
 
-**每次提审的产物都归档在 `~/projects/dsh-pocket-ios-archives/<版本>-<build>/`**：
+**版本记录只靠 git tag**（`v1.0.9` 这种格式），**不归档 ipa / dSYM**——
+真正需要对比的是代码，不是编译产物。
 
+**一致性由脚本强制保证**（这是重点，否则 tag 会骗人）：
+
+1. **工作区必须干净** — 有未提交改动时，tag 记下的 commit 就不是上传的那份代码；
+2. **该版本的 tag 不能已存在** — 一版一 tag，防止同一版本重复发布；
+3. **build 号必须大于上一个 tag 的 build** — App Store 会拒绝重复 build；
+4. **tag 只在上传成功之后才打** — 上传失败就没有 tag，不会留下「tag 了但没发」的状态；
+5. 另外会校验导出 ipa 里的实际版本号，确认 `Info.plist` 真的生效了。
+
+**对比任意两个版本**：
+
+```bash
+git diff v1.0.8 v1.0.9              # 代码差异
+git log v1.0.8..v1.0.9 --oneline    # 这版包含哪些提交
 ```
-DSHPocket.ipa         上传到 App Store 的原样包
-DSHPocket.app.dSYM    线上崩溃符号化
-meta.json             版本 / commit / deliveryUuid
-```
-
-`manifest.jsonl` 是全部归档的索引。**归档目录在仓库外**，避免把大文件提交进 git。
-
-> 为什么单独做归档：`/tmp` 里的打包产物重启就没了，历史上传记录在本地留不下来。
 
 ## 链接
 
