@@ -329,7 +329,9 @@ GET /dsh-plugin-panel/mobile/list
 | 聚合接口 | ✅ | 返回 `{"plugins":[{"module":"dsh-plugin-panel","kind":"web","path":"/dsh-plugin-panel/mobile"}]}` |
 | 移动页面 | ✅ | `GET /mobile?mt=...` 返回 HTML，含插件名与版本 |
 | **App 面板显示列表** | ✅ | 真机 2026-11-16 06:32 首次显示「没有支持手机端的插件」→ 修 `path` 后 06:44 显示插件条目 |
-| 展开详情 | 待用户确认 | — |
+| 展开详情 | ✅ | 真机 2026-11-16 06:44 截图：48 个插件全部列出（名称 + 版本），可滚动 |
+| 页面内容口径 | ✅ 有意为之 | `/mobile` 页面列出**全部已安装插件**（用 `listBundles()`），
+`/mobile/list` 只返回**声明了 dsh.mobile 的**（1 个）。前者是浏览，后者是 App 判断入口 |
 
 ### 实现期踩到的四个坑（都是自己的错）
 
@@ -339,3 +341,28 @@ GET /dsh-plugin-panel/mobile/list
 4. **`fetchList` 漏传 `mt`**：401 被映射成「需要先连接到电脑」，文案把人引向网络问题而不是参数问题。
 
 **第 3、4 条的共同教训**：spec 里写清了契约（`{ module, title, kind, version, icon?, path?, schema? }`），但两侧实现各自漏了一半，**契约没有自动化校验**。P3 应该先补一个「契约一致性」测试。
+
+### 一个额外发现
+
+`/mobile` 页面我用了 `listBundles()`（全部 48 个插件），而 `/mobile/list` 只返回 1 个声明了
+`dsh.mobile` 的。**这个不一致是有意的**：页面是给用户浏览「装了什么」，
+聚合接口是给 App 判断「哪些能上手机」。但两处口径不同容易让人误解，
+所以在这里写明，并在页面文案里也标注了「这是插件的移动版页面」。
+
+### HMR 的教训（重要，别重犯）
+
+试图让 HMR 监听 `node_modules` 里的插件代码（默认 `ignored` 含 `**/node_modules`，
+所以插件改动永远不热重载），我改了 `cordis.patch.yml` 的 hmr 配置：
+
+```yaml
+- id: hmr
+  config:
+    ignored: ["**/.*", "cache", "data", "**/node_modules/.pnpm/**", "**/node_modules/@**"]
+```
+
+**结果把 DSH 搞成无法连接**，只能手工恢复配置。
+
+**结论：HMR 的 `ignored` 不要动。** 插件改了该重启就重启（用户手动 `Cmd+Q`），
+比弄坏 DSH 强。而且**远程 `kill` 任何信号都会触发 Electron 崩溃恢复页**
+（实测 SIGTERM / SIGKILL 都是），所以「App 内重启」必须由服务端自己 `spawn` + 优雅退出，
+不能由客户端远程杀进程——这条已写进 `2026-11-16-0620-restart-from-app.md`。
