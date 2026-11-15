@@ -83,9 +83,18 @@ struct PluginPanelSheet: View {
     private func prepare() async {
         do {
             let token = try await PluginMobileAPI.fetchToken(baseURL: baseURL)
-            let entries = try await PluginMobileAPI.fetchList(baseURL: baseURL, token: token)
-            guard let first = entries.first else {
-                phase = .empty
+            let result = try await PluginMobileAPI.fetchList(baseURL: baseURL, token: token)
+            guard let first = result.entries.first else {
+                // 有声明但不合格时，把原因说出来——否则用户会以为是「没装插件」
+                if let bad = result.invalid.first {
+                    let detail = bad.problems.isEmpty ? L10n.t("声明不完整") : bad.problems.joined(separator: "、")
+                    // L10n.t 只接受单个字符串，这里用拼接而不是格式化参数
+                    phase = .failed(
+                        L10n.t("这个插件的移动端声明有问题：") + bad.module + " — " + detail
+                    )
+                } else {
+                    phase = .empty
+                }
                 return
             }
             entry = first
