@@ -285,6 +285,14 @@ final class ConnectionModel {
             }
         }
 #endif
+        // 一次性迁移：会话列表默认显示方式从「按时间线」改为「按工作区分组」。
+        // 光改 @AppStorage 的初始值没用——key 一旦写过（老用户都写过），
+        // 初始值就被忽略。用一个独立标记保证只迁移一次，之后用户手动切换不再被覆盖。
+        let groupedDefaultKey = "dsh-pocket.session-list-mode.default-grouped.v1"
+        if !UserDefaults.standard.bool(forKey: groupedDefaultKey) {
+            UserDefaults.standard.set(SessionListMode.grouped.rawValue, forKey: "dsh-pocket.session-list-mode")
+            UserDefaults.standard.set(true, forKey: groupedDefaultKey)
+        }
         loadSavedEndpoints()
 #if DEBUG
         if ProcessInfo.processInfo.environment["DSH_STORE_SHOTS"] == "1" {

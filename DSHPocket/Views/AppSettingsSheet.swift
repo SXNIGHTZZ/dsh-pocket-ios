@@ -18,7 +18,7 @@ import UserNotifications
 
 struct AppSettingsSheet: View {
     @Bindable var model: ConnectionModel
-    @AppStorage("dsh-pocket.session-list-mode") private var sessionListModeRaw = SessionListMode.timeline.rawValue
+    @AppStorage("dsh-pocket.session-list-mode") private var sessionListModeRaw = SessionListMode.grouped.rawValue
     /// 复制诊断后的短暂反馈：按钮图标从听诊器变成对勾。
     /// 放在设置里而不是会话页，是因为连不上时根本没有会话可进——
     /// 而「连不上」恰恰是最需要诊断的时候（2026-11-15 用户反馈）。
