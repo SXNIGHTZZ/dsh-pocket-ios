@@ -96,7 +96,7 @@ npx dsh-pocket-ios doctor                # 诊断：端口可达性、依赖是�
 
 **认证方式**：`cli.*` 端点免 cookie，但**只接受来自 `127.0.0.1` / `::1` 的请求**——只有本机能调，公网进不来。所以 CLI 必须和 DSH 跑在同一台机器上。
 
-**云服务器上推荐 Tailscale**：不开任何公网端口，也不涉及域名备案。
+**云服务器上推荐 Tailscale**：不开任何公网端口。
 
 ```bash
 # 服务器
@@ -110,7 +110,7 @@ npx dsh-pocket-ios mode tailscale
 npx dsh-pocket-ios pair
 ```
 
-**有备案域名**的话，也可以用 Nginx/Caddy 反代到 `127.0.0.1:3091`，得到固定 HTTPS 地址、手机零安装。
+**有域名**的话，也可以用 Nginx/Caddy 反代到 `127.0.0.1:3091`，得到固定 HTTPS 地址、手机零安装。
 
 ## 端口
 

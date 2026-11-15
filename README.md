@@ -26,40 +26,67 @@
 
 ## 亮点
 
-- **扫码免密**：电脑设置页生成一次性配对二维码（60 秒有效、自动轮换、单次使用），手机扫码直接登录；
-- **两条连接路线**：Tailscale（固定地址，推荐）或 dsh-pocket（局域网/公网，不装 Tailscale）；
+- **扫码免密**：电脑设置页生成一次性配对二维码（10 分钟有效，可重复打开），手机扫码直接登录；
+- **四种连接方式**：局域网 / Cloudflare / Tailscale / EasyTier，随时切换，全部由**一个插件**提供；
+- **服务器也能用**：DSH 装在无图形界面的云服务器上时，用 CLI 在终端出码；
+- **连一次长期免密**：设备凭证存进 Keychain（1 年），重装 App、DSH 重启都不用重新扫码；
 - **原生体验**：SwiftUI 导航、系统键盘与安全区、原生列表手势；
 - **会话管理**：按工作区分组（可展开/收起）、置顶、归档（可撤销）、长按重命名；
 - **对话**：实时流式回复、工具过程折叠、Markdown、图片、引用、模型切换；
 - **中英文**：跟随系统 / 中文 / English，设置页、会话、连接页全量覆盖。
 
-## 连接方式（主推：Tailscale + 扫码配对）
+## 连接方式
 
-### 推荐：Tailscale 固定地址 + 一次性配对码
+四种方式都在 **DSH → 设置 → 手机访问（iOS）** 里切换，二维码会跟着当前方式变。
 
-**为什么主推**：地址固定、换 Wi-Fi / 切 4G 都不用重新扫码；不暴露公网；扫码免密，体验最接近原生 App。
+| 方式 | 适合 | 手机端要装 |
+| --- | --- | --- |
+| **局域网** | 手机和电脑同一 Wi-Fi | **什么都不用** |
+| **Cloudflare** | 人在外面，任何网络 | **什么都不用**（首次电脑自动下载约 20MB） |
+| **Tailscale** | 长期使用、要固定地址 | Tailscale |
+| **EasyTier** | 自主组网、不依赖境外服务 | Shadowrocket 等代理 App |
 
-需要：Mac 装 DSH + `dsh-pocket-ios` 插件；iPhone 装 DSH Pocket + Tailscale（两台设备登录同一账号）。
+> 不再需要第三方 `dsh-pocket` 插件。
 
-1. Mac 上执行一次固定入口：
+### 局域网（同一 Wi-Fi，最快）
 
-   ```bash
-   tailscale serve --bg 3091
-   ```
+电脑选「局域网」，手机连同一个 Wi-Fi 扫二维码即可。
 
-   （Tailscale 后台 DNS 页需开启 HTTPS Certificates）
-2. 打开 DSH → 设置 →「手机访问（iOS）」，卡片上会出现一个**自动轮换的配对二维码**；
-3. 用 DSH Pocket 扫码 → 自动登录，无需输入密码。
+### Cloudflare（手机零安装）
 
-> 读不到 Tailscale 状态时可手写配置：`~/.dsh/dsh-pocket-ios/tailscale.json`，内容 `{"url":"https://你的机器名.你的tailnet.ts.net"}`。
+电脑选「Cloudflare」，首次自动下载 `cloudflared` 并开隧道，之后扫码即连。
 
-### 备选：dsh-pocket（局域网 / 公网，不装 Tailscale）
+> 地址会在 DSH 重启后变化；流量经公网中继，敏感场景建议用局域网或 Tailscale。
 
-需要：Mac 装 DSH + `dsh-pocket` 插件；iPhone 装 DSH Pocket。
+### Tailscale（地址固定，长期稳定）
 
-在 DSH → 设置 →「手机访问」用 dsh-pocket 的局域网/公网二维码连接，并输入它显示的访问密码。不需要安装 `dsh-pocket-ios`（想要统一设置页和扫码配对再加装）。
+1. 电脑和手机都装 Tailscale、登录同一账号；
+2. 电脑执行一次 `tailscale serve --bg 3091`（Tailscale 后台需开启 HTTPS Certificates）；
+3. 电脑选「Tailscale」，手机扫码即连。
 
-> 两个插件可共存：`dsh-pocket-ios` 使用 **3091**，`dsh-pocket` 使用 **3081**。
+### EasyTier（自建组网）
+
+电脑装 EasyTier 并**装成 launchd 系统服务**（开机自启、崩溃重启），手机用 Shadowrocket 加载面板给出的订阅配置。详见插件目录的 README。
+
+### 云服务器（没有图形界面）
+
+服务器上没有设置页，用 CLI 在终端出码：
+
+```bash
+npx dsh-pocket-ios pair                  # 终端直接打印二维码
+npx dsh-pocket-ios pair --png ~/q.png    # 存成图片，发到手机再扫
+```
+
+**服务器上推荐 Tailscale**（不开公网端口）；有域名的话也可以用 Caddy/Nginx 反代 `127.0.0.1:3091`。
+
+### CLI
+
+```bash
+npx dsh-pocket-ios pair              # 出配对二维码（默认命令）
+npx dsh-pocket-ios status            # 当前连接方式、地址、是否就绪
+npx dsh-pocket-ios mode tailscale    # 切换连接方式
+npx dsh-pocket-ios doctor            # 连不上时先跑这个
+```
 
 ## 安装
 
