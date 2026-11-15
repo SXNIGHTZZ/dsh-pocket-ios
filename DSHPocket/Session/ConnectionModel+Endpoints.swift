@@ -146,7 +146,7 @@ extension ConnectionModel {
         // 删掉的正是当前这台电脑：把 Keychain 里的地址与登录 cookie 一起清掉，
         // 否则下次启动又会凭旧凭证自动连回来——用户会以为「删了还在」。
         if address == connection.serverAddress {
-            ConnectionVault.clear()
+            ConnectionVault.clear(address: connection.serverAddress)
             UserDefaults.standard.removeObject(forKey: Self.savedServerAddressKey)
             connection.pin = ""
             PinKeychain.clear()
@@ -203,7 +203,7 @@ extension ConnectionModel {
             || ConnectionVault.loadAddress() != nil
         guard hasAddress, let base = try? Self.serverURL(from: connection.serverAddress) else { return }
         // 恢复登录态：沙盒被清后 cookie 会丢，从 Keychain 放回，避免重新扫码。
-        ConnectionVault.restoreAuthCookies(to: base)
+        ConnectionVault.restoreAuthCookies(to: base, address: connection.serverAddress)
         do {
             sessionStore.sessions = try await fetchSessions()
             connection.isConnected = true
@@ -213,7 +213,7 @@ extension ConnectionModel {
             // 只要 Keychain 里还留着长期设备凭证，就先静默换一张新票再试。
             // 之前这里只 applyConnectError，等于把「免扫码」的能力浪费了——
             // 每次重装 build 用户都得重新扫一次（2026-11-15 反馈）。
-            if ConnectionVault.loadDeviceToken() != nil, await tryRefreshAuth() {
+            if ConnectionVault.loadDeviceToken(for: connection.serverAddress) != nil, await tryRefreshAuth() {
                 do {
                     sessionStore.sessions = try await fetchSessions()
                     connection.isConnected = true

@@ -153,6 +153,11 @@ struct ConnectView: View {
                 Button {
                     connection.serverAddress = endpoint.address
                     connection.errorMessage = nil
+                    // 点一下就直连：设备凭证与 cookie 现在按地址各存一份（见 ConnectionVault），
+                    // 所以切回以前连过的电脑通常不需要再输密码。
+                    // 之前这里只填地址不发起连接，用户还得再点一次「连接」——
+                    // 历史连接的意义就没了（2026-11-15 用户反馈）。
+                    Task { await model.connect() }
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: endpoint.kind == .lan ? "wifi" : "globe")

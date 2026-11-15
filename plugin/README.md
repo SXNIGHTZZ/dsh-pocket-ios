@@ -81,6 +81,37 @@ App：<https://apps.apple.com/app/id6832288744>（DSH Pocket iOS）。
 
 > 卸载服务：面板就绪态会给出 `uninstallCommand`（`launchctl bootout` + 删 plist）。
 
+## CLI（服务器场景）
+
+DSH 装在**没有图形界面的服务器**上时，没有「手机访问（iOS）」页面可以看二维码。用 CLI 在终端里操作：
+
+```bash
+npx dsh-pocket-ios pair                  # 打印一次性配对二维码（10 分钟有效）
+npx dsh-pocket-ios pair --png ~/q.png    # 存成 PNG，发到手机再扫
+npx dsh-pocket-ios pair --url            # 只输出地址，便于脚本使用
+npx dsh-pocket-ios status                # 当前连接方式 / 地址 / 是否就绪
+npx dsh-pocket-ios mode tailscale        # 切换：lan | cloudflare | tailscale | easytier
+npx dsh-pocket-ios doctor                # 诊断：端口可达性、依赖是否装好
+```
+
+**认证方式**：`cli.*` 端点免 cookie，但**只接受来自 `127.0.0.1` / `::1` 的请求**——只有本机能调，公网进不来。所以 CLI 必须和 DSH 跑在同一台机器上。
+
+**云服务器上推荐 Tailscale**：不开任何公网端口，也不涉及域名备案。
+
+```bash
+# 服务器
+curl -fsSL https://tailscale.com/install.sh | sh   # 国内不稳时改用 pkgs.tailscale.com 的 yum/dnf 源
+systemctl enable --now tailscaled
+tailscale up --hostname=dsh-server
+tailscale serve --bg 3091
+
+# 之后
+npx dsh-pocket-ios mode tailscale
+npx dsh-pocket-ios pair
+```
+
+**有备案域名**的话，也可以用 Nginx/Caddy 反代到 `127.0.0.1:3091`，得到固定 HTTPS 地址、手机零安装。
+
 ## 端口
 
 - 稳定入口默认 **3091**，监听 `0.0.0.0`（局域网/虚拟网络需要）；
@@ -96,6 +127,9 @@ App：<https://apps.apple.com/app/id6832288744>（DSH Pocket iOS）。
 | `/dsh-pocket-ios/login` | 用访问密码换 cookie |
 | `/dsh-pocket-ios/refresh` | 用 `dsh-pocket-device` 换新 cookie（免扫码重连） |
 | `/dsh-pocket-ios/easytier.conf` | Shadowrocket 订阅配置（纯文本，免认证） |
+| `/dsh-pocket-ios/cli.pair` | CLI 出配对码（免 cookie，**仅限 127.0.0.1**） |
+| `/dsh-pocket-ios/cli.status` | CLI 查状态（同上） |
+| `/dsh-pocket-ios/cli.mode` | CLI 切连接方式（同上） |
 | `/dsh-pocket-ios/tailscale.status` / `mode.set` / `mode.status` | 设置页 RPC |
 
 ## 安全

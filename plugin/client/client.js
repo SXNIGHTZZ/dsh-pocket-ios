@@ -140,7 +140,7 @@ window.__ModuleLoader__.load({
         refreshStatus();
         generatePair();
         // 倒计时到末期自动换新码（用户要的就是持续刷新，接受"扫到刚换掉"的概率）。
-        // 5 分钟有效期，剩 30 秒换——比原来的 60 秒/剩 8 秒宽松得多。
+        // 10 分钟有效期（PAIR_TTL_MS），剩 30 秒换——比原来的 60 秒/剩 8 秒宽松得多。
         var timer = setInterval(function () {
           setRemaining(function (prev) {
             var next = prev - 1;

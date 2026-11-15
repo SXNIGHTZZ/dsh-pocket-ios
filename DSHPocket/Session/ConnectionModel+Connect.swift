@@ -64,6 +64,36 @@ extension ConnectionModel {
         return true
     }
 
+    /// 用 Keychain 里保存的登录态恢复连接（不要求密码）。
+    ///
+    /// 顺序：先放回保存的 cookie 直接拉会话；失败再用长期设备凭证换新票重试。
+    /// 两者都没有或都失效时返回 false，由调用方退回「请输入密码」。
+    @MainActor
+    func restoreSavedSession(for address: String) async -> Bool {
+        guard let base = try? Self.serverURL(from: address) else { return false }
+        ConnectionVault.restoreAuthCookies(to: base, address: address)
+        do {
+            sessionStore.sessions = try await fetchSessions()
+            connection.isConnected = true
+            connection.errorMessage = nil
+            recordDiagnostic("用已保存的登录态恢复：\(DSHURL.redactedAddress(address))")
+            return true
+        } catch {
+            // cookie 失效（DSH 重启过）：用设备凭证换新票再试一次。
+            guard ConnectionVault.loadDeviceToken(for: address) != nil,
+                  await tryRefreshAuth() else { return false }
+            do {
+                sessionStore.sessions = try await fetchSessions()
+                connection.isConnected = true
+                connection.errorMessage = nil
+                recordDiagnostic("设备凭证换票恢复：\(DSHURL.redactedAddress(address))")
+                return true
+            } catch {
+                return false
+            }
+        }
+    }
+
     @MainActor
     func connect() async {
         connection.errorMessage = nil
@@ -101,8 +131,18 @@ extension ConnectionModel {
             request.httpShouldHandleCookies = true
             let loginSession = URLSession(configuration: .default)
             defer { loginSession.finishTasksAndInvalidate() }
-            _ = try await loginSession.data(for: request)
-            let hasAuth = HTTPCookieStorage.shared.cookies(for: url)?.contains { $0.name.hasPrefix("dsh-auth") } ?? false
+            let (_, pairResponse) = try await loginSession.data(for: request)
+            let jar = HTTPCookieStorage.shared.cookies(for: url) ?? []
+            let hasAuth = jar.contains { $0.name.hasPrefix("dsh-auth") }
+            if !hasAuth {
+                // 把「到底发生了什么」记下来：这条分支以前只说「二维码失效」，
+                // 但服务端日志显示配对其实是成功的（pair login ok），
+                // 真正丢的是 cookie。没有这些字段就只能瞎猜（2026-11-15）。
+                let status = (pairResponse as? HTTPURLResponse)?.statusCode ?? -1
+                let finalURL = (pairResponse as? HTTPURLResponse)?.url?.absoluteString ?? "-"
+                let names = jar.map { $0.name }.sorted().prefix(6).joined(separator: ",")
+                recordDiagnostic("配对未拿到 dsh-auth：HTTP \(status)，最终 \(DSHURL.redactedAddress(finalURL))，cookie[\(jar.count)]=\(names.isEmpty ? "空" : names)（请求地址 \(DSHURL.redactedAddress(url.absoluteString))）")
+            }
             guard hasAuth else { throw ConnectionError.invalidPin }
             sessionStore.sessions = try await fetchSessions()
             connection.isConnected = true
@@ -112,7 +152,7 @@ extension ConnectionModel {
             // 凭证落盘统一走 persistConnectedState：地址、cookie、设备凭证一个都不能漏。
             // 之前配对分支只存了后两者，导致「扫码连上 → 重装 → 又要求扫码」。
             persistConnectedState()
-            if ConnectionVault.loadDeviceToken() != nil {
+            if ConnectionVault.loadDeviceToken(for: connection.serverAddress) != nil {
                 recordDiagnostic("已保存长期设备凭证（下次 DSH 重启免扫码）")
             } else {
                 recordDiagnostic("未收到长期设备凭证：插件可能还是旧版")
@@ -147,7 +187,7 @@ extension ConnectionModel {
             connection.addressNeedsRescan = false
             PinKeychain.save(connection.pin)
             await syncPushRegistration()
-            ConnectionVault.saveAuthCookies(from: url)
+            ConnectionVault.saveAuthCookies(from: url, address: connection.serverAddress)
             recordDiagnostic("token 登录成功：会话 \(sessionStore.sessions.count) 个")
             return
             } catch {
@@ -159,8 +199,14 @@ extension ConnectionModel {
             return
             }
         }
-        // 先拦空密码，再说格式：空输入报「格式不对」会让人以为密码本身有问题。
-        guard !connection.pin.isEmpty else {
+        // 没有密码时先别急着要密码：这台电脑如果连过，Keychain 里有 cookie
+        // 或长期设备凭证，直接用它们恢复，用户点一下历史连接就能进去。
+        // 之前的实现是「pin 为空 → 立刻报请输入密码」，历史连接等于没用
+        // （2026-11-15 用户反馈：点完还是让他输密码）。
+        if connection.pin.isEmpty {
+            if await restoreSavedSession(for: connection.serverAddress) {
+                return
+            }
             connection.errorMessage = ConnectFailureMessage.pinMissing().text
             return
         }
@@ -322,8 +368,8 @@ extension ConnectionModel {
         // Keychain 供重装后恢复（沙盒会清，Keychain 不会）。
         ConnectionVault.saveAddress(connection.serverAddress)
         if let url = try? Self.serverURL(from: connection.serverAddress) {
-            ConnectionVault.saveAuthCookies(from: url)
-            ConnectionVault.saveDeviceToken(from: url)
+            ConnectionVault.saveAuthCookies(from: url, address: connection.serverAddress)
+            ConnectionVault.saveDeviceToken(from: url, address: connection.serverAddress)
         }
         recordEndpoint(connection.serverAddress)
     }

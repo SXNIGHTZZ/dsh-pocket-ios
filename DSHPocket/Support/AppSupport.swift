@@ -142,8 +142,29 @@ enum PinKeychain {
 /// 所以把「地址 + dsh-auth cookie」放这里，重装后能自动恢复连接。
 enum ConnectionVault {
     private static let addressService = "com.ruska.dsh-pocket-ios.address"
-    private static let cookieService = "com.ruska.dsh-pocket-ios.auth-cookie"
+    private static let cookieServiceBase = "com.ruska.dsh-pocket-ios.auth-cookie"
     private static let account = "default"
+
+    /// 把地址归一化成 Keychain key 的一部分。
+    ///
+    /// 为什么要按地址隔离：之前设备凭证和 cookie 只有**一份**全局的。
+    /// 用户保存了多台电脑/多种连接方式（家里局域网、公司、云服务器隧道），
+    /// 切到另一个地址时那份凭证对不上，只能重新输密码——
+    /// 而历史连接的意义就是「点一下就回去」（2026-11-15 用户反馈）。
+    /// 现在每个 host:port 各存一份，互不覆盖。
+    private static func vaultKey(_ address: String) -> String {
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), let host = url.host else {
+            // 解析不出来就退化成原文（去掉会破坏 Keychain 的字符）
+            return trimmed.replacingOccurrences(of: "/", with: "_")
+        }
+        let port = url.port.map { "-\($0)" } ?? ""
+        return "\(host)\(port)"
+    }
+
+    private static func cookieService(_ address: String) -> String {
+        "\(cookieServiceBase).\(vaultKey(address))"
+    }
 
     // MARK: 地址
 
@@ -159,29 +180,35 @@ enum ConnectionVault {
 
     // MARK: 长期设备凭证
 
-    private static let deviceService = "com.ruska.dsh-pocket-ios.device"
+    private static let deviceServiceBase = "com.ruska.dsh-pocket-ios.device"
+
+    private static func deviceService(_ address: String) -> String {
+        "\(deviceServiceBase).\(vaultKey(address))"
+    }
 
     /// 配对后插件会种一个 `dsh-pocket-device` cookie；把它单独存进 Keychain，
     /// 用来在 DSH 重启、session cookie 失效时静默换新票，不必重新扫码。
-    static func saveDeviceToken(from url: URL) {
+    static func saveDeviceToken(from url: URL, address: String) {
         let token = HTTPCookieStorage.shared.cookies(for: url)?
             .first { $0.name == "dsh-pocket-device" }?.value
         guard let token, !token.isEmpty else { return }
-        write(token, service: deviceService)
+        write(token, service: deviceService(address))
     }
 
-    static func loadDeviceToken() -> String? {
-        read(service: deviceService)
+    /// 取某个地址的设备凭证。地址为 nil 时返回 nil（没有地址就无从查起）。
+    static func loadDeviceToken(for address: String?) -> String? {
+        guard let address, !address.isEmpty else { return nil }
+        return read(service: deviceService(address))
     }
 
-    static func clearDeviceToken() {
-        delete(service: deviceService)
+    static func clearDeviceToken(for address: String) {
+        delete(service: deviceService(address))
     }
 
     // MARK: 登录 cookie
 
     /// 只保存 dsh-auth 开头的 cookie（其余是无关的会话 cookie）。
-    static func saveAuthCookies(from url: URL) {
+    static func saveAuthCookies(from url: URL, address: String) {
         let cookies = HTTPCookieStorage.shared.cookies(for: url)?
             .filter { $0.name.hasPrefix("dsh-auth") } ?? []
         guard !cookies.isEmpty else { return }
@@ -198,12 +225,12 @@ enum ConnectionVault {
             return dict
         }
         guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
-        write(String(decoding: data, as: UTF8.self), service: cookieService)
+        write(String(decoding: data, as: UTF8.self), service: cookieService(address))
     }
 
     /// 把保存过的 cookie 放回 HTTPCookieStorage；过期的直接丢弃。
-    static func restoreAuthCookies(to url: URL) {
-        guard let raw = read(service: cookieService),
+    static func restoreAuthCookies(to url: URL, address: String) {
+        guard let raw = read(service: cookieService(address)),
               let data = raw.data(using: .utf8),
               let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
         var restored: [HTTPCookie] = []
@@ -230,15 +257,15 @@ enum ConnectionVault {
 
     /// 彻底忘记这台电脑：地址与登录 cookie 一并清除。
     /// 「断开连接」不调用它（用户只是暂时不连）；只有「删除这台电脑」才清。
-    static func clear() {
+    static func clear(address: String) {
         delete(service: addressService)
-        delete(service: cookieService)
-        delete(service: deviceService)
+        delete(service: cookieService(address))
+        delete(service: deviceService(address))
     }
 
     /// 只清登录 cookie（认证失效时用，避免拿废凭证反复失败）。
-    static func clearAuthCookies() {
-        delete(service: cookieService)
+    static func clearAuthCookies(for address: String) {
+        delete(service: cookieService(address))
     }
 
     // MARK: 底层读写

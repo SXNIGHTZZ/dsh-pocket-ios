@@ -32,15 +32,39 @@ const EASYTIER_PORTAL_PORT = 11500
 const EASYTIER_SOCKS_PORT = 1080
 /** WireGuard / 代理客户端用的虚拟网段，与 --vpn-portal 的路径段一致。 */
 const EASYTIER_CLIENT_CIDR = '10.14.14.0/24'
-const TAILSCALE_BIN = '/Applications/Tailscale.app/Contents/MacOS/Tailscale'
+// Tailscale 可执行文件的位置。
+// macOS 上 DSH 进程拿不到 Tailscale GUI 的 IPC，必须用 App 内置的 CLI；
+// Linux（包括云服务器）上则是 PATH 里的 /usr/bin/tailscale。
+// 之前写死 macOS 路径，导致服务器上每个 tailscale 调用都 ENOENT、
+// 插件判定「当前连接方式还没有地址」（2026-11-15 在阿里云上踩到）。
+const TAILSCALE_BIN = process.platform === 'darwin'
+  ? '/Applications/Tailscale.app/Contents/MacOS/Tailscale'
+  : 'tailscale'
 const BODY_MAX = 64 * 1024
 /** 稳定本地入口端口：Tailscale Serve 指向它；默认 3081（与 dsh-pocket 代理端口一致）。 */
 const PROXY_PORT = Number(process.env.DSH_POCKET_IOS_PROXY_PORT ?? 3091)
 
 const LOG_DIR = join(homedir(), '.dsh', 'dsh-pocket-ios')
 
-// 一次性配对 token（60 秒有效、用后作废），用于扫码免密码连接。
+// 一次性配对 token 有效期。10 分钟：手机端要经历「看到码 → 掏出手机 →
+// 从相册选图 / 对准扫码 → 等隧道冷启动」，实测 5 分钟在服务器 + 相册导入
+// 这种慢路径下经常刚好过期（用户反馈）。
+const PAIR_TTL_MS = 600_000
+
+// 一次性配对 token，用于扫码免密码连接。
 const pairTokens = new Map()
+
+/**
+ * 生成一个配对 token（32 字符 base64url 字符集）。
+ *
+ * 抽成公共函数是因为 CLI 端点（cli.pair）最初写了 `newPairToken()` 这个
+ * 不存在的名字，运行时才报 "newPairToken is not defined"——静态检查发现不了。
+ * 两处共用一份实现，杜绝这种漂移。
+ */
+function generatePairToken() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+  return Array.from({ length: 32 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+}
 
 /**
  * 长期设备凭证。
@@ -234,7 +258,14 @@ async function modeStatus() {
   }
 
   if (currentMode === 'cloudflare') {
-    const port = dshWebPortRef
+    // 隧道必须指向**插件代理**（PROXY_PORT），不能指向 dsh web 本体。
+    // 指向本体时 Host 是隧道域名、不经过 forwardHeaders 的 loopback 改写，
+    // 而 DSH 的 /api 只信任 loopback / trustedHosts：
+    //   GET  /            → 200（首页不做 Host 校验）
+    //   POST /api/...     → 403 forbidden（peer 不是 owner）
+    // App 又把 403 映射成 invalidPin，于是用户看到「配对没成功」——
+    // 明明 token 和服务端都正常（2026-11-15 在阿里云上抓到的就是这个）。
+    const port = PROXY_PORT
     if (!port) {
       return { ...base, address: null, qr: null, state: 'error', error: '拿不到 dsh web 端口' }
     }
@@ -537,7 +568,12 @@ function attachStableProxy(ctx, handler) {
   server.listen(PROXY_PORT, '0.0.0.0', () => {
     ctx?.logger?.info?.(`dsh-pocket-ios: 稳定入口 http://0.0.0.0:${PROXY_PORT} → DSH 127.0.0.1:${dshPort}`)
   })
-  return () => { try { server.close() } catch { /* 已关闭 */ } }
+  return () => {
+    try { server.close() } catch { /* 已关闭 */ }
+    // DSH 退出/重载时必须显式停掉 cloudflared，否则它变成孤儿进程一直挂着：
+    // 反复重启会累积多个隧道（每轮换一个域名），既浪费又让人以为「地址老在变」。
+    try { void cloudflareFor(PROXY_PORT).stop() } catch { /* 忽略 */ }
+  }
 }
 
 /**
@@ -567,6 +603,11 @@ export function apply(ctx) {
           // easytier.conf 免认证：代理客户端下载它时没有 DSH cookie。
           // 内容只有局域网 IP + SOCKS5 端口 + 网段，不含任何凭证。
           || rawPath === `${CHANNEL}/easytier.conf`
+          // cli.* 免 cookie，但**只允许本机回环**（CLI 在服务器终端里跑，
+          // 没法走浏览器登录那套）。IP 校验在每个端点内部做。
+          || rawPath === `${CHANNEL}/cli.pair`
+          || rawPath === `${CHANNEL}/cli.status`
+          || rawPath === `${CHANNEL}/cli.mode`
         if (!isLogin && typeof connection?.requestRejection === 'function') {
           const rejection = connection.requestRejection(req)
           if (rejection !== undefined) {
@@ -575,6 +616,90 @@ export function apply(ctx) {
           }
         }
         const urlObject = new URL(req.url ?? '/', 'http://127.0.0.1')
+
+        // CLI 专用：查当前连接方式状态（只允许本机）。
+        // 让服务器场景不必开浏览器就能确认「现在连的是哪条路、有没有就绪」。
+        if (urlObject.pathname === `${CHANNEL}/cli.status`) {
+          const remote = String(req.socket?.remoteAddress ?? '')
+          if (!/^(127\.|::1$|::ffff:127\.)/.test(remote)) {
+            send(res, 403, { ok: false, error: 'cli.status 只允许本机访问' })
+            return
+          }
+          const status = await modeStatus()
+          send(res, 200, {
+            type: 'server-response',
+            result: {
+              ok: true,
+              value: {
+                mode: status.mode,
+                state: status.state,
+                address: status.address,
+                error: status.error,
+                pinSet: status.pinSet,
+                modes: MODES,
+              },
+            },
+          })
+          return
+        }
+
+        // CLI 专用：切换连接方式（只允许本机）。
+        // 复用 mode.set 的互斥逻辑：切走 cloudflare 前先停隧道，避免两个隧道并存。
+        if (urlObject.pathname === `${CHANNEL}/cli.mode`) {
+          const remote = String(req.socket?.remoteAddress ?? '')
+          if (!/^(127\.|::1$|::ffff:127\.)/.test(remote)) {
+            send(res, 403, { ok: false, error: 'cli.mode 只允许本机访问' })
+            return
+          }
+          let requested = urlObject.searchParams.get('mode') ?? ''
+          if (!requested) {
+            try {
+              const raw = await readRawBody(req)
+              requested = String(JSON.parse(raw || '{}')?.mode ?? '')
+            } catch { /* 用 query 里的 */ }
+          }
+          if (!MODES.includes(requested)) {
+            send(res, 400, { ok: false, error: `未知模式 ${requested}，可选：${MODES.join(' / ')}` })
+            return
+          }
+          if (currentMode === 'cloudflare' && requested !== 'cloudflare' && cloudflareTunnel) {
+            await cloudflareTunnel.stop()
+          }
+          currentMode = requested
+          await saveMode(requested)
+          const status = await modeStatus()
+          send(res, 200, {
+            type: 'server-response',
+            result: { ok: true, value: { mode: status.mode, state: status.state, address: status.address } },
+          })
+          return
+        }
+
+        // CLI 专用配对端点：给「DSH 装在无 GUI 服务器上、只在终端里出码」的场景用。
+        // 不走 cookie/auth（CLI 拿不到浏览器会话），改为严格限制来源必须是本机回环，
+        // 且只返回一次性的配对 token，不暴露任何长期凭证。
+        if (urlObject.pathname === `${CHANNEL}/cli.pair`) {
+          const remote = String(req.socket?.remoteAddress ?? '')
+          const isLocal = /^(127\.|::1$|::ffff:127\.)/.test(remote)
+          if (!isLocal) {
+            send(res, 403, { ok: false, error: 'cli.pair 只允许本机访问' })
+            return
+          }
+          const status = await modeStatus()
+          if (!status.address) {
+            send(res, 409, { ok: false, error: '当前连接方式还没有地址，先在 DSH 面板里让它就绪' })
+            return
+          }
+          const pairToken = generatePairToken()
+          pairTokens.set(pairToken, { expiresAt: Date.now() + PAIR_TTL_MS })
+          const pairURL = `${status.address}/?pair=${encodeURIComponent(pairToken)}`
+          await logLine(`cli pair token created: ${pairURL.replace(/pair=([^&]{6})[^&]*/, 'pair=$1…')}`)
+          send(res, 200, {
+            type: 'server-response',
+            result: { ok: true, value: { url: pairURL, expiresIn: PAIR_TTL_MS / 1000, mode: status.mode } },
+          })
+          return
+        }
 
         // Shadowrocket 订阅配置：代理类客户端靠它把 10.14.14.0/24 显式指向 SOCKS5。
         // 不经过 RPC，直接吐纯文本。
@@ -802,14 +927,11 @@ function guessProto(req, host) {
           return
         }
         if (endpoint === 'pair.create') {
-          const pairToken = Array.from({ length: 32 }, () => {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
-            return chars[Math.floor(Math.random() * chars.length)]
-          }).join('')
+          const pairToken = generatePairToken()
           // 60 秒太短：从「看到二维码」到「手机上点开链接」要经过拿手机、开相机、
           // 扫、等隧道冷启动，实测很容易超时（用户反馈「显示配对已过期」）。
           // 放宽到 5 分钟，仍是一次连接的时间尺度，不会长期留后门。
-          pairTokens.set(pairToken, { expiresAt: Date.now() + 300_000 })
+          pairTokens.set(pairToken, { expiresAt: Date.now() + PAIR_TTL_MS })
           // 按当前连接方式取地址：Cloudflare 用 quick 隧道，Tailscale 用固定地址，
           // 都没有时回退到请求 Host（局域网直连）。
           const status = await modeStatus()
@@ -847,7 +969,7 @@ function guessProto(req, host) {
           const qr = await QRCode.toDataURL(pairURL, { margin: 1, width: 360 })
           // 把生成的 URL 记下来（token 只留前 6 位），排查「扫出来的地址不对」时一眼可见
           await logLine(`pair token created: ${pairURL.replace(/pair=([^&]{6})[^&]*/, 'pair=$1…')}`)
-          send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value: { url: pairURL, qr, expiresIn: 300 } } })
+          send(res, 200, { type: 'server-response', rpcId, result: { ok: true, value: { url: pairURL, qr, expiresIn: PAIR_TTL_MS / 1000 } } })
           return
         }
         if (endpoint === 'pin.refresh') {

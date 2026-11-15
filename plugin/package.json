@@ -1,7 +1,7 @@
 {
   "name": "dsh-pocket-ios",
   "version": "0.5.0",
-  "description": "给 DSH 设置页加「手机访问（iOS）」：局域网 / Cloudflare / Tailscale / EasyTier 四种连接方式可切换，扫码即连，无需密码",
+  "description": "给 DSH 设置页加「手机访问（iOS）」：局域网 / Cloudflare / Tailscale / EasyTier 四种连接方式可切换，扫码即连；附带 CLI 供无 GUI 的服务器在终端出二维码",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -10,6 +10,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "bin",
     "lib",
     "client",
     "cordis.patch.yml",
@@ -59,5 +60,8 @@
   "bugs": {
     "url": "https://github.com/jqlong17/dsh-pocket-ios/issues"
   },
-  "author": "Ruska <jqlong17@gmail.com>"
+  "author": "Ruska <jqlong17@gmail.com>",
+  "bin": {
+    "dsh-pocket-ios": "bin/dsh-pocket-ios.js"
+  }
 }

@@ -109,6 +109,16 @@ export class CloudflareTunnel {
   async start() {
     // 幂等：已经跑着就直接复用，避免切换时启两个进程
     if (this.state === 'ready' && this.url) return this.url
+    // 单飞：并发调 start() 会让两个调用都看到 child === null，
+    // 各自 await stop()（空操作）后各起一个 cloudflared，this.child 被后者覆盖，
+    // 前一个进程失去引用再也杀不掉——表现为「越调越多隧道、地址一直在变」
+    // （2026-11-15 在阿里云服务器上实测到 3 个并发进程 + 4 个不同地址）。
+    if (this.startingPromise) return this.startingPromise
+    this.startingPromise = this.#doStart().finally(() => { this.startingPromise = null })
+    return this.startingPromise
+  }
+
+  async #doStart() {
     await this.stop()
 
     // 首次使用会自动下载（约 20MB，多源 + 分块）；已装则直接复用
@@ -201,6 +211,15 @@ export class CloudflareTunnel {
 
   /** 状态快照（不启动）。 */
   status() {
+    // 进程已经退出、但状态还停在 ready 的情况真会发生：DSH 被 kill -9 重启时
+    // 子进程成了孤儿（或被系统清理），插件内存里却还是「隧道已就绪」。
+    // 不修正的话 modeStatus 会一直返回一个连不上的地址，用户扫码后一头雾水
+    // （2026-11-15 服务器上实测：杀光 cloudflared 后 cli.pair 仍返回旧域名）。
+    if (this.state === 'ready' && this.child && this.child.exitCode !== null) {
+      this.state = 'idle'
+      this.url = null
+      this.child = null
+    }
     return { state: this.state, url: this.url, error: this.error, phase: this.phase ?? null, phaseDetail: this.phaseDetail ?? null }
   }
 }

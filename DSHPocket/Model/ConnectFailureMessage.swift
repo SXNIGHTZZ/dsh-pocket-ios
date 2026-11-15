@@ -120,7 +120,10 @@ private extension ConnectFailureMessage {
             switch context {
             case .pairing:
                 return Self(.auth,
-                            L10n.t("配对二维码失效了（60 秒有效、只能用一次）。在电脑上重新生成二维码，再扫一次。"),
+                            // 不要断言「就是过期了」：这个分支只代表「配对请求没换来 dsh-auth」。
+                            // 过期、网络中断、隧道冷启动超时都会落到这里，写死一个原因是误导
+                            // （2026-11-15 用户明明扫的是刚生成的码，却被告知「60 秒有效」）。
+                            L10n.t("这次配对没成功。二维码可能已过期（10 分钟有效），也可能是网络没通——回电脑重新生成一张再扫；反复失败可以改用访问密码登录。"),
                             needsRescan: true)
             case .loginToken:
                 return Self(.auth,

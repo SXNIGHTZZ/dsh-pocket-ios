@@ -38,7 +38,7 @@ extension ConnectionModel {
         guard !isDemoMode else { return }
         // DSH 重启后 session cookie 会失效，但设备凭证还在：
         // 先用它静默换一张新票，成功就直接重连，用户看不到任何提示。
-        if !authRefreshAttempted, ConnectionVault.loadDeviceToken() != nil {
+        if !authRefreshAttempted, ConnectionVault.loadDeviceToken(for: connection.serverAddress) != nil {
             authRefreshAttempted = true
             Task { @MainActor in
                 if await self.tryRefreshAuth() {
@@ -56,7 +56,7 @@ extension ConnectionModel {
     /// 用长期设备凭证向插件换新的 `dsh-auth` cookie（跟随 302 即种上）。
     @MainActor
     func tryRefreshAuth() async -> Bool {
-        guard let token = ConnectionVault.loadDeviceToken(),
+        guard let token = ConnectionVault.loadDeviceToken(for: connection.serverAddress),
               let base = try? Self.serverURL(from: connection.serverAddress) else { return false }
         // 先删掉已失效的 dsh-auth cookie：带着旧凭证去换票，DSH 会当成「续期一个失效会话」，
         // 结果立刻又 401（实测：换票后 2 秒再次失效）。
@@ -79,7 +79,7 @@ extension ConnectionModel {
         let fresh = HTTPCookieStorage.shared.cookies(for: base)?
             .contains { $0.name.hasPrefix("dsh-auth") } ?? false
         if fresh {
-            ConnectionVault.saveAuthCookies(from: base)
+            ConnectionVault.saveAuthCookies(from: base, address: connection.serverAddress)
             return true
         }
         // 没拿到 cookie：把插件返回的 ok:false 说明记下来，便于排查。
@@ -106,7 +106,7 @@ extension ConnectionModel {
         PinKeychain.clear()
         // cookie 已失效：清掉，避免下次启动拿着废凭证反复 401。
         // 地址保留，用户重新输入密码/扫码即可，不必重新找电脑。
-        ConnectionVault.clearAuthCookies()
+        ConnectionVault.clearAuthCookies(for: connection.serverAddress)
         if let base = try? Self.serverURL(from: connection.serverAddress) { purgeAuthCookies(for: base) }
         sessionStore.selected = nil
         sessionStore.navigationPath = []
