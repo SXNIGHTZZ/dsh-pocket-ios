@@ -81,8 +81,8 @@ struct ConnectView: View {
                             scanHint = nil
                             Task { await model.connect() }
                         } else {
-                            // 扫的是 dsh-pocket 的「地址型」二维码（方式二）：需要手动输入访问密码。
-                            scanHint = L10n.t("已填入地址，请输入电脑上显示的访问密码（方式二）")
+                            // 扫的是「地址型」二维码（EasyTier 走 SOCKS5 时常见）：需要手动输入访问密码。
+                            scanHint = L10n.t("已填入地址，请输入电脑上显示的访问密码")
                         }
                     }
                 }

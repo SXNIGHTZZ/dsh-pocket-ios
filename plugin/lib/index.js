@@ -350,7 +350,9 @@ async function modeStatus() {
       config,
       // Shadowrocket 这类代理客户端用这个订阅 URL（配置里带了显式规则）
       confUrl: lanIp ? `http://${lanIp}:${PROXY_PORT}${CHANNEL}/easytier.conf` : null,
-      hint: `用 WireGuard 客户端（Passepartout / AmneziaVPN）导入并启用，然后在 App 里连接 http://${virtualHost}:${PROXY_PORT}。代理类 App 不行。`,
+      // 配对码（面板上方大二维码）本来就是 http://10.14.14.1:3091/?pair=xxx，
+      // 手机代理配好后扫它即可自动登录。这里要把顺序讲清楚，否则用户会以为只能手填密码。
+      hint: `先在手机代理里加载下方订阅（一次性），之后扫上方二维码即自动连接 http://${virtualHost}:${PROXY_PORT}，无需密码。`,
     }
   }
 

@@ -28,26 +28,36 @@ struct ConnectScanCard: View {
                     .foregroundStyle(brand)
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text(L10n.t("准备（二选一）"))
+                Text(L10n.t("准备（任选一种，都在电脑的「手机访问（iOS）」里切换）"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 prereqRow(
-                    icon: "network",
-                    title: L10n.t("方式一（推荐）：Tailscale"),
-                    detail: L10n.t("电脑装 Tailscale + dsh-pocket-ios 连接器，手机装 Tailscale 和本 App；扫码即连，地址固定")
+                    icon: "wifi",
+                    title: L10n.t("局域网"),
+                    detail: L10n.t("手机和电脑连同一个 Wi-Fi 就行，最快，手机不用装任何东西")
                 )
                 prereqRow(
-                    icon: "puzzlepiece.extension",
-                    title: L10n.t("方式二：dsh-pocket"),
-                    detail: L10n.t("电脑装 dsh-pocket 插件（可选再加 dsh-pocket-ios 连接器）；扫它的局域网/公网二维码后输入访问密码")
+                    icon: "cloud",
+                    title: L10n.t("Cloudflare"),
+                    detail: L10n.t("手机不用装东西，人在外面也能连（走公网，稍慢；首次电脑会自动下载约 20MB）")
+                )
+                prereqRow(
+                    icon: "network",
+                    title: L10n.t("Tailscale"),
+                    detail: L10n.t("电脑和手机都装 Tailscale 并登录同一账号，地址固定，长期更稳")
+                )
+                prereqRow(
+                    icon: "point.3.connected.trianglepath.dotted",
+                    title: L10n.t("EasyTier"),
+                    detail: L10n.t("电脑跑 EasyTier 组网，手机用 Shadowrocket 等加载订阅配置；需先配好代理规则")
                 )
                 Divider().padding(.vertical, 2)
                 Text(L10n.t("然后"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                guideStep("1", L10n.t("按你选的路线装好对应插件（方式一：dsh-pocket-ios；方式二：dsh-pocket）"))
-                guideStep("2", L10n.t("打开电脑 DSH → 设置 → 手机访问"))
-                guideStep("3", L10n.t("扫码：方式一自动连接；方式二输入访问密码"))
+                guideStep("1", L10n.t("电脑装 dsh-pocket-ios 连接器（DSH → 设置 → 内置插件，只需这一个插件）"))
+                guideStep("2", L10n.t("打开电脑 DSH → 设置 → 手机访问（iOS），选一种连接方式"))
+                guideStep("3", L10n.t("用本 App 扫二维码：多数方式扫码即连；EasyTier 需先在手机上配好代理规则"))
             }
             Button {
                 showingScanner = true
