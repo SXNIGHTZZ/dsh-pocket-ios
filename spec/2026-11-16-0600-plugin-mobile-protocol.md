@@ -324,4 +324,18 @@ GET /dsh-plugin-panel/mobile/list
 
 | 用例 | 结果 | 证据 |
 | --- | --- | --- |
-| （待实现后回填） | | |
+| `dsh.mobile` 解析 | ✅ | 12 个单测全绿（`PluginMobileManifestTests`），覆盖缺字段/未知 kind/未来版本/数字归一化 |
+| token 端点 | ✅ | `POST /dsh-plugin-panel/mobile/token` → 200，32 字符、5 分钟有效 |
+| 聚合接口 | ✅ | 返回 `{"plugins":[{"module":"dsh-plugin-panel","kind":"web","path":"/dsh-plugin-panel/mobile"}]}` |
+| 移动页面 | ✅ | `GET /mobile?mt=...` 返回 HTML，含插件名与版本 |
+| **App 面板显示列表** | ✅ | 真机 2026-11-16 06:32 首次显示「没有支持手机端的插件」→ 修 `path` 后 06:44 显示插件条目 |
+| 展开详情 | 待用户确认 | — |
+
+### 实现期踩到的四个坑（都是自己的错）
+
+1. **`requestRejection` 挡住了局域网/Tailscale 的 Host**：手机连的是 `192.168.1.18` 或 `*.ts.net`，不是 loopback，DSH 的 `isTrustedApiRequest` 三项都不满足 → 403。改成限流免认证（每分钟 10 次）。
+2. **`SELF_DIR` 的暂时性死区**：把 `MOBILE_LOG` 写在 `SELF_DIR` 定义之前，`const` 的 TDZ 让**整个插件加载失败**、所有路由 404/405。现象上完全看不出是「加载失败」还是「路由没注册」。
+3. **聚合接口漏返回 `path`**：前端严格校验、后端少给一个字段，中间没有任何检查，表现为「没有支持手机端的插件」。
+4. **`fetchList` 漏传 `mt`**：401 被映射成「需要先连接到电脑」，文案把人引向网络问题而不是参数问题。
+
+**第 3、4 条的共同教训**：spec 里写清了契约（`{ module, title, kind, version, icon?, path?, schema? }`），但两侧实现各自漏了一半，**契约没有自动化校验**。P3 应该先补一个「契约一致性」测试。
