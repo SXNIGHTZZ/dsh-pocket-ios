@@ -49,6 +49,7 @@ struct ConversationView: View {
     /// 触发加载时是否已经贴在最顶部：此时加载完直接展示新一页，不做位置锚定。
     @State private var olderLoadWasAtTop = false
     @State private var showingJobs = false
+    @State private var showingPlugins = false
     @State private var showingCamera = false
     @State private var showingPhotoPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
@@ -456,6 +457,9 @@ struct ConversationView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                PluginToolbarButton { showingPlugins = true }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 JobsToolbarButton { showingJobs = true }
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -475,6 +479,12 @@ struct ConversationView: View {
         }
         .sheet(isPresented: $showingJobs) {
             JobsSheet(model: model)
+        }
+        .sheet(isPresented: $showingPlugins) {
+            // 地址无效时不打开面板（例如还没连上），避免弹一个必然失败的空白页
+            if let baseURL = try? ConnectionModel.serverURL(from: model.connection.serverAddress) {
+                PluginPanelSheet(baseURL: baseURL)
+            }
         }
         .sheet(isPresented: $showingCamera) {
             CameraPicker { image in model.addDraftImage(image) }.ignoresSafeArea()

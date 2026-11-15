@@ -31,6 +31,21 @@ struct JobsToolbarButton: View {
     }
 }
 
+/// 右上角插件入口，位置在「后台任务」左侧。
+///
+/// 和 `JobsToolbarButton` 一样刻意不持有 model——它只收一个动作，
+/// 否则工具栏会随插件列表刷新反复求值。
+struct PluginToolbarButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "puzzlepiece.extension")
+        }
+        .accessibilityLabel(L10n.t("插件"))
+    }
+}
+
 enum PocketChrome {
     /// 品牌绿：用于填充、徽标等大面积。
     static let brand = Color(red: 0.08, green: 0.48, blue: 0.37)
