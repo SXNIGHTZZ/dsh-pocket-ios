@@ -14,7 +14,7 @@ import { promisify } from 'node:util'
 import QRCode from 'qrcode'
 import { CloudflareTunnel, findCloudflared } from './cloudflare.js'
 import { selectLanIPv4, lanEntryUrl } from './lan.js'
-import { findEasytier, readWireGuardPortal, normalizeWireGuardConfig, clientAddressFrom, coreCommand, randomNetwork, shadowrocketConf } from './easytier.js'
+import { findEasytier, readWireGuardPortal, normalizeWireGuardConfig, clientAddressFrom, coreCommand, randomNetwork, shadowrocketConf, installServiceCommand, uninstallServiceCommand, EASYTIER_DAEMON_LABEL } from './easytier.js'
 
 const execFileP = promisify(execFile)
 
@@ -314,19 +314,24 @@ async function modeStatus() {
     if (!wg) {
       // 还没建好门户：给出该执行的命令 + 随机网络名/密钥
       const net = await readOrCreateEasyTierNetwork()
-      const cmd = coreCommand({
+      // 用 launchd 装成系统服务：开机自启 + 崩溃自动重启 + 后台常驻。
+      // 比原来 `sudo easytier-core ...` 手动跑稳得多——那种方式关终端就断、重启电脑就没了。
+      const { core: corePath } = await findEasytier()
+      const cmd = installServiceCommand({
+        corePath: corePath ?? '~/.local/bin/easytier-core',
         networkName: net.networkName,
         networkSecret: net.networkSecret,
-        portalPort: EASYTIER_PORTAL_PORT,
+        ipv4: '10.14.14.1',
+        socksPort: EASYTIER_SOCKS_PORT,
       })
       return {
         ...base,
         address: null,
         qr: null,
         state: 'needs-setup',
-        error: '还没建 WireGuard 门户。在电脑终端执行下面的命令（需要 sudo），完成后点刷新。',
+        error: '还没启动 EasyTier 服务。复制下面的命令到终端执行（一次即可，装成开机自启的后台服务），然后点刷新。',
         command: cmd,
-        hint: '手机端需要能建 VPN 隧道的客户端（Passepartout / AmneziaVPN）。Shadowrocket、Streisand 这类代理 App 会把 10.14.14.x 当私有网段直连，用不了。',
+        hint: '装成服务后会开机自启、崩溃自动重启。手机端在 Shadowrocket 里加载下方订阅（全局路由要选「配置」而不是「代理」）。',
       }
     }
 
@@ -477,6 +482,9 @@ function attachStableProxy(ctx, handler) {
         host: '127.0.0.1', port: dshPort, method: req.method,
         path: req.url, headers: forwardHeaders(req.headers),
       }, (proxyRes) => {
+        // 与 upgrade 同一个坑：上游读到一半断开时 proxyRes 会抛 ECONNRESET，
+        // 不接管就会打死整个 host。
+        proxyRes.on('error', () => { try { res.destroy() } catch { /* 已关闭 */ } })
         res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers)
         proxyRes.pipe(res)
       })
@@ -494,13 +502,23 @@ function attachStableProxy(ctx, handler) {
       path: req.url, headers: forwardHeaders(req.headers),
     })
     proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+      // **必须给两个裸 socket 都挂 'error'**。
+      // 手机切后台 / 换网 / 切连接方式时，对端会发 RST，此时 socket 的读操作抛
+      // ECONNRESET；没有 error 监听就会冒泡成 uncaughtException，
+      // 而 DSH 的 installFailLoud 对任何未捕获异常都是 process.exit(1)
+      // —— 表现为「手机一动，桌面 DSH 整个退出」（2026-11-15 定位，当天崩了 5 次）。
+      socket.on('error', () => { try { proxySocket.destroy() } catch { /* 已关闭 */ } })
+      proxySocket.on('error', () => { try { socket.destroy() } catch { /* 已关闭 */ } })
+
       const lines = [`HTTP/1.1 101 Switching Protocols`]
       for (const [key, value] of Object.entries(proxyRes.headers)) {
         if (value !== undefined) lines.push(`${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
       }
-      socket.write(lines.join('\r\n') + '\r\n\r\n')
-      if (proxyHead?.length) socket.write(proxyHead)
-      if (head?.length) proxySocket.write(head)
+      try {
+        socket.write(lines.join('\r\n') + '\r\n\r\n')
+        if (proxyHead?.length) socket.write(proxyHead)
+        if (head?.length) proxySocket.write(head)
+      } catch { /* 写失败说明对端已断，交给 error 监听处理 */ }
       proxySocket.pipe(socket)
       socket.pipe(proxySocket)
     })
@@ -508,6 +526,11 @@ function attachStableProxy(ctx, handler) {
     proxyReq.end()
   })
   server.on('error', (error) => ctx?.logger?.warn?.(`dsh-pocket-ios: 稳定入口端口 ${PROXY_PORT} 不可用（${error?.message ?? error}）`))
+  // 兜底：任何未经 upgrade 路径处理的客户端连接错误，都不能让它冒泡到 host。
+  server.on('clientError', (error, socket) => {
+    try { socket.destroy() } catch { /* 已关闭 */ }
+    void error
+  })
   // 绑 0.0.0.0 而不是只绑回环：局域网模式下手机要能直连这个端口。
   // 安全性由 DSH 自身的登录态保证（非 /dsh-pocket-ios/ 前缀的请求会原样转发给 DSH，
   // 未认证时 DSH 返回 401）——这和 dsh-pocket 的做法一致。
