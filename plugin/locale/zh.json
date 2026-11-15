@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "DSH Pocket iOS（手机访问）",
+    "description": "在设置页加「手机访问（iOS）」：局域网 / Cloudflare / Tailscale / EasyTier 四种连接方式可切换，手机扫码即连，无需密码。附带 CLI，服务器上也能在终端出码。"
+  }
+}

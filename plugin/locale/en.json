@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "DSH Pocket iOS (Phone access)",
+    "description": "Adds a \"Phone access (iOS)\" settings page with four switchable methods: LAN, Cloudflare, Tailscale, EasyTier. Scan a QR to connect, no password needed. Ships a CLI so servers can print the pairing code in a terminal."
+  }
+}
