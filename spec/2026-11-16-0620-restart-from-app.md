@@ -1,7 +1,7 @@
 # App 内一键重启 DSH
 
 > **文件名**：`spec/2026-11-16-0620-restart-from-app.md`
-> **Status**：Draft（不立即执行）
+> **Status**：Draft（**2026-11-16 结论：当前架构下做不到优雅重启，见「架构事实」**）
 > **起始日期**：2026-11-16
 > **预估工时**：约 300 分钟
 > **对应提交**：（未实现）
@@ -37,10 +37,11 @@
 
 **目标**
 
-- App 内提供「重启 DSH」入口（设置页，**不做主界面按钮**，避免误触）
-- 服务端提供 `POST /dsh-pocket-ios/restart`，**不依赖外部守护进程**也能自重启
-- 重启前后 App 能给出明确反馈：**正在重启 → 已恢复 / 恢复失败**
-- **端口变化要处理**：DSH 重启后端口可能变（实测 61231 → 53269 → 53450），App 不能因此失联
+- **明确当前能力的边界**：为什么插件做不到优雅重启，以及用户该怎么做
+- 把「需要重启的改动」尽可能变成「不需要重启」（优先做 `dsh.mobile` 这类声明）
+- 若未来上游提供 restart 入口，App 侧能直接对接
+
+**（原目标「服务端自 spawn 重启」已因架构事实撤销，见下节）**
 
 **非目标**
 
@@ -59,81 +60,90 @@
 
 **结论**：自重启（`spawn` 一个 detached 的自己再退出）是唯一在「无守护」前提下也能工作的方案。
 
-## 方案
+## 架构事实（2026-11-16 实读 app.asar 确认）
 
-### 第 1 步：服务端自重启端点
-
-`dsh-pocket-ios` 新增：
+**桌面端是两层进程**：
 
 ```
-POST /dsh-pocket-ios/restart
-→ { ok: true, mode: "self-respawn" }
+Electron 主进程（GUI，/Applications/.../Contents/MacOS/DeepSeek）
+  ├── renderer（窗口）
+  ├── helper（gpu / network / audio）
+  └── host 子进程（Node.js，跑 DSH 核心 + 全部插件）
 ```
 
-**实现要点**（`lib/index.js`）：
+**插件跑在 host 子进程里**，不在主进程。
+
+### 关键发现 1：host 任何退出方式都被判为失败
+
+`lib/main.js:11840`（`child.once("close")`）：
 
 ```js
-const child = spawn(process.execPath, process.argv.slice(1), {
-  detached: true,       // 脱离父进程的进程组，父退出后继续活
-  stdio: 'ignore',      // 不继承管道，否则父退出时子会收到 EPIPE
-  env: process.env,
-})
-child.unref()           // 父进程的事件循环不因这个子进程而保持
-setTimeout(() => process.exit(0), 300)   // 留 300ms 让响应发出去
+if (code !== 0 && code !== null) this.fail(`dsh desktop host exited with ${code}`);
+else this.fail(`dsh desktop host stopped`);      // ← code=0 也 fail
 ```
 
-**为什么这么做**：
+**所以**：插件里调 `process.exit(0)` 和外部 `kill` **结果一样**——主进程都走 `fail()`，
+弹恢复对话框。**「插件优雅退出自己」这条路不存在。**
 
-- `detached: true` 是关键——不脱离的话，父进程退出会把子进程一起带走
-- `stdio: 'ignore'` 也是关键——继承 stdout 管道的话，父进程一退出子进程写日志就会 `EPIPE`
-- `unref()` 让 Node 不要因为还有子进程引用而不退出
-- **先回响应再退出**，否则 App 收到的是连接被重置
+### 关键发现 2：唯一优雅重启入口不可达
 
-**为什么不用 `osascript quit` / `process.kill`**：实测无效（Electron 弹确认框）。
+`lib/main.js:20092`（`DesktopFatalRecovery` 对象）：
 
-**为什么不用 `launchctl kickstart`**：桌面端 DSH 不是 launchd 管理的（用户手动打开的），没有服务定义可 kickstart。
-
-### 第 2 步：认证
-
-复用现有的 PIN 认证（和 `/login` 同一套）。**不能免认证**——重启是破坏性操作，必须证明身份。
-
-### 第 3 步：App 侧入口
-
-**位置**：设置页 → 调试区 → 「重启电脑上的 DSH」
-
-**交互**：
-
-```
-[重启电脑上的 DSH]
-  ↓ 点击
-确认弹窗：
-  「重启会断开当前连接，正在跑的任务也会中断。
-   重启后需要等几秒重新连接。」
-   [取消] [重启]
-  ↓ 确认
-1. 面板显示「正在重启…」（原生，不关 sheet）
-2. POST /dsh-pocket-ios/restart
-3. 轮询 /dsh-pocket-ios/…（每 1s，最多 20s）直到有响应
-4. 成功 → 显示「已重启」，自动重连
-   失败 → 显示「重启后连不上，请检查电脑上的 DSH 是否还在运行」
+```js
+restart: () => {
+    app.relaunch();              // Electron 官方优雅重启
+    quitWithoutConfirmation();
+}
 ```
 
-### 第 4 步：端口变化处理
+**它只在两个地方被调用**：
+- 崩溃恢复对话框的「重新启动」按钮（就是用户每次手点的那一个）
+- 开发模式菜单的「Restart App Host」
 
-**这是最容易翻车的地方**：
+**没有 IPC 暴露，插件够不到。** 插件在 host 子进程里，也拿不到 Electron 的 `app` 对象。
+
+### 结论
+
+> **「从插件内部安全重启 DSH 且不崩溃」在当前架构下做不到。**
+> 任何 host 侧退出（`exit(0)` / `exit(1)` / 被 kill）都会让主进程进入恢复流程。
+
+## 替代方案
+
+### 方案 A：明确告知，不做远程重启（推荐）
+
+App 里如果需要重启，**不提供远程重启按钮**，而是解释清楚：
 
 ```
-重启前：http://192.168.1.18:3091
-重启后：端口可能变（如果 DSH 是 `dsh web --port 0` 自动分配）
+「这个改动需要重启电脑上的 DSH。请在电脑上按 Cmd+Q 退出后重新打开。」
 ```
 
-**处理**：
+**为什么这样最好**：用户手动 `Cmd+Q` 是**唯一不产生崩溃恢复页**的路径
+（Electron 自己走完整 quit 流程）。
 
-- **优先方案**：`/restart` 的**响应里带上新端口**——但**重启前进程不知道新端口**（新进程才分配）
-- **实际方案**：App 重启后**重试原端口**；失败则提示用户「如果端口变了，请重新扫码」
-- **更好的方案**：让服务端**固定端口**（`dsh web --port <fixed>`），从根上避免变化
+### 方案 B：让需要重启的改动变成"不需要重启"
 
-**建议**：在文档里明确「固定端口 + 重启」的组合才可靠。
+**这是真正有价值的方向**。分类看：
+
+| 改动内容 | 能否不重启 | 现状 |
+| --- | --- | --- |
+| 插件的 `dsh.mobile` 声明 | ✅ **可以** | `/mobile/list` 每次请求重新扫 `node_modules`，已实现 |
+| 插件的 locale / icon | ⚠️ 可能 | 需要在读取时重新读文件（未验证） |
+| 插件的 JS 代码 | ❌ | HMR 默认 ignore `node_modules`，改 `ignored` 会把 DSH 搞坏（实测） |
+| profile 配置 | ❌ | 启动时加载 |
+
+**所以**：优先把「声明类」信息做成运行时读取，代码类改动老实重启。
+
+### 方案 C：launchd 管理（不推荐）
+
+注册 DSH 为 LaunchAgent，用 `launchctl kickstart -k` 重启。
+
+**为什么否决**：桌面 App 被 launchd 接管后，Dock 行为、单实例、自动更新流程都可能出问题，
+风险远大于收益，且只覆盖 macOS。
+
+### 方案 D：给 DSH 上游提功能请求
+
+请求暴露一个「restart」的 IPC/HTTP 入口（内部实现就是现有的 `app.relaunch()`）。
+**这是唯一能让「App 内一键重启」真正干净落地的路径**，但取决于上游是否接受。
 
 ## 被否决的方案（Rationale & Alternatives）
 
