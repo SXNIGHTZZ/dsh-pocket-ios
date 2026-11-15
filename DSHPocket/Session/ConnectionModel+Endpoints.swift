@@ -209,6 +209,21 @@ extension ConnectionModel {
             connection.isConnected = true
             connection.errorMessage = nil
         } catch {
+            // cookie 失效（DSH 重启、或重装后沙盒里的 cookie 被清）：
+            // 只要 Keychain 里还留着长期设备凭证，就先静默换一张新票再试。
+            // 之前这里只 applyConnectError，等于把「免扫码」的能力浪费了——
+            // 每次重装 build 用户都得重新扫一次（2026-11-15 反馈）。
+            if ConnectionVault.loadDeviceToken() != nil, await tryRefreshAuth() {
+                do {
+                    sessionStore.sessions = try await fetchSessions()
+                    connection.isConnected = true
+                    connection.errorMessage = nil
+                    recordDiagnostic("恢复连接：设备凭证换票成功，免扫码")
+                    return
+                } catch {
+                    // 换票成功但拉会话仍失败，继续走下面的错误上报
+                }
+            }
             connection.isConnected = false
             applyConnectError(error)
         }
