@@ -51,22 +51,15 @@ enum PluginMobileAPI {
         return token
     }
 
-    /// 聚合接口的响应：合法条目 + 声明不完整的插件（含原因）。
-    ///
-    /// 为什么要把 invalid 带出来：服务端以前把不合格的声明直接过滤掉，
-    /// App 只看到空数组，就显示「没有支持手机端的插件」——像是没装，
-    /// 实际只是少个字段（2026-11-16 因此浪费半小时）。
-    struct ListResult: Sendable {
-        var entries: [PluginMobileEntry]
-        var invalid: [(module: String, problems: [String])]
-    }
-
     /// 拉「哪些插件声明了移动端」。
+    ///
+    /// 解析放在 DSHKit 的 `PluginMobileCatalog`（App 层没有测试 target，
+    /// 下沉才能单测——AGENTS.md 的约定）。
     ///
     /// **必须带 `mt` token**：这条路由和 `/mobile` 页面一样只认一次性令牌，
     /// 不认 cookie（因为手机侧走的是局域网/Tailscale 的 Host，过不了 DSH 的 Host 校验）。
     /// 之前这里漏传 token，直接 401，被映射成「需要先连接到电脑」（2026-11-16 踩到）。
-    static func fetchList(baseURL: URL, token: String) async throws -> ListResult {
+    static func fetchList(baseURL: URL, token: String) async throws -> PluginMobileCatalog {
         var components = URLComponents(
             url: baseURL.appending(path: "dsh-plugin-panel/mobile/list"),
             resolvingAgainstBaseURL: false
@@ -82,14 +75,7 @@ enum PluginMobileAPI {
         if http.statusCode == 401 || http.statusCode == 403 { throw APIError.notAuthenticated }
         guard (200..<300).contains(http.statusCode) else { throw APIError.badResponse(http.statusCode) }
 
-        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        let plugins = json?["plugins"] as? [[String: Any]] ?? []
-        let invalid = (json?["invalid"] as? [[String: Any]] ?? []).compactMap { raw -> (String, [String])? in
-            guard let module = raw["module"] as? String, !module.isEmpty else { return nil }
-            return (module, raw["problems"] as? [String] ?? [])
-        }
-        return ListResult(entries: plugins.compactMap(PluginMobileEntry.parse),
-                          invalid: invalid.map { (module: $0.0, problems: $0.1) })
+        return PluginMobileCatalog.parse(try? JSONSerialization.jsonObject(with: data))
     }
 
     /// 拼出给 WebView 的完整地址：`{address}{path}?mt={token}`。

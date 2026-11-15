@@ -85,13 +85,10 @@ struct PluginPanelSheet: View {
             let token = try await PluginMobileAPI.fetchToken(baseURL: baseURL)
             let result = try await PluginMobileAPI.fetchList(baseURL: baseURL, token: token)
             guard let first = result.entries.first else {
-                // 有声明但不合格时，把原因说出来——否则用户会以为是「没装插件」
-                if let bad = result.invalid.first {
-                    let detail = bad.problems.isEmpty ? L10n.t("声明不完整") : bad.problems.joined(separator: "、")
-                    // L10n.t 只接受单个字符串，这里用拼接而不是格式化参数
-                    phase = .failed(
-                        L10n.t("这个插件的移动端声明有问题：") + bad.module + " — " + detail
-                    )
+                // 有声明但不合格时把原因说出来——否则用户会以为是「没装插件」。
+                // 这段判断逻辑在 DSHKit 里（PluginMobileCatalog.emptyStateMessage），有单测覆盖。
+                if let message = result.emptyStateMessage {
+                    phase = .failed(message.title + " — " + message.detail)
                 } else {
                     phase = .empty
                 }

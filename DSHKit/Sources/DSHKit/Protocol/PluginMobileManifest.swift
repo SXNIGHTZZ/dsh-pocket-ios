@@ -118,3 +118,57 @@ public struct PluginMobileEntry: Equatable, Sendable, Identifiable {
         return PluginMobileEntry(module: module, manifest: manifest)
     }
 }
+
+/// 聚合接口 `/dsh-plugin-panel/mobile/list` 的完整响应。
+///
+/// 为什么放在 DSHKit：App 层没有测试 target，而这段是纯解析逻辑——
+/// 下沉到 DSHKit 才能单测（AGENTS.md 的约定）。
+///
+/// `invalid` 是「声明不合格的插件 + 原因」。服务端早期把不合格的直接过滤掉，
+/// App 只看到空数组就显示「没有支持手机端的插件」，像是没装，
+/// 实际只是少个字段（2026-11-16 因此浪费半小时）。
+public struct PluginMobileCatalog: Equatable, Sendable {
+
+    public struct InvalidEntry: Equatable, Sendable {
+        public let module: String
+        public let problems: [String]
+        public init(module: String, problems: [String]) {
+            self.module = module
+            self.problems = problems
+        }
+    }
+
+    public let entries: [PluginMobileEntry]
+    public let invalid: [InvalidEntry]
+
+    public init(entries: [PluginMobileEntry], invalid: [InvalidEntry]) {
+        self.entries = entries
+        self.invalid = invalid
+    }
+
+    /// 从聚合接口的 JSON 解析。任何字段缺失都降级为空，不抛异常。
+    public static func parse(_ raw: Any?) -> PluginMobileCatalog {
+        guard let json = raw as? [String: Any] else {
+            return PluginMobileCatalog(entries: [], invalid: [])
+        }
+        let entries = (json["plugins"] as? [[String: Any]] ?? []).compactMap(PluginMobileEntry.parse)
+        let invalid = (json["invalid"] as? [[String: Any]] ?? []).compactMap { item -> InvalidEntry? in
+            guard let module = (item["module"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !module.isEmpty else { return nil }
+            return InvalidEntry(module: module, problems: item["problems"] as? [String] ?? [])
+        }
+        return PluginMobileCatalog(entries: entries, invalid: invalid)
+    }
+
+    /// 空列表时该给用户看什么。有不合格声明时优先说原因，而不是说「没装插件」。
+    public var emptyStateMessage: (title: String, detail: String)? {
+        guard entries.isEmpty else { return nil }
+        if let first = invalid.first {
+            let detail = first.problems.isEmpty
+                ? "声明不完整"
+                : first.problems.joined(separator: "、")
+            return ("插件「\(first.module)」的移动端声明有问题", detail)
+        }
+        return nil
+    }
+}
