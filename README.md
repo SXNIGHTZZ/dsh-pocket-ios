@@ -161,6 +161,26 @@ plugin/                        # DSH 插件（dsh-pocket-ios）：设置页、�
 docs/qa-conversation-regression.md
 ```
 
+## 发布与归档
+
+```bash
+# 改完 Info.plist 的版本号/build 后：
+./scripts/release.sh              # 打包 → 导出 ipa → 归档 → 上传 ASC
+./scripts/release.sh --no-upload  # 只打包归档
+```
+
+**每次提审的产物都归档在 `~/projects/dsh-pocket-ios-archives/<版本>-<build>/`**：
+
+```
+DSHPocket.ipa         上传到 App Store 的原样包
+DSHPocket.app.dSYM    线上崩溃符号化
+meta.json             版本 / commit / deliveryUuid
+```
+
+`manifest.jsonl` 是全部归档的索引。**归档目录在仓库外**，避免把大文件提交进 git。
+
+> 为什么单独做归档：`/tmp` 里的打包产物重启就没了，历史上传记录在本地留不下来。
+
 ## 链接
 
 - App Store：<https://apps.apple.com/app/id6832288744>
