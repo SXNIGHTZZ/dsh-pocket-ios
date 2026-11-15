@@ -1,6 +1,6 @@
 {
   "name": "dsh-pocket-ios",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "给 DSH 设置页加「手机访问（iOS）」：局域网 / Cloudflare / Tailscale / EasyTier 四种连接方式可切换，扫码即连，无需密码",
   "type": "module",
   "main": "lib/index.js",
