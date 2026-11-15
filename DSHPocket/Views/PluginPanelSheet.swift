@@ -83,7 +83,7 @@ struct PluginPanelSheet: View {
     private func prepare() async {
         do {
             let token = try await PluginMobileAPI.fetchToken(baseURL: baseURL)
-            let entries = try await PluginMobileAPI.fetchList(baseURL: baseURL)
+            let entries = try await PluginMobileAPI.fetchList(baseURL: baseURL, token: token)
             guard let first = entries.first else {
                 phase = .empty
                 return

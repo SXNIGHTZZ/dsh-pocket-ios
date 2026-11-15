@@ -51,9 +51,19 @@ enum PluginMobileAPI {
         return token
     }
 
-    /// 拉「哪些插件声明了移动端」。同样走 `URLSession.shared`（有 cookie）。
-    static func fetchList(baseURL: URL) async throws -> [PluginMobileEntry] {
-        var request = URLRequest(url: baseURL.appending(path: "dsh-plugin-panel/mobile/list"))
+    /// 拉「哪些插件声明了移动端」。
+    ///
+    /// **必须带 `mt` token**：这条路由和 `/mobile` 页面一样只认一次性令牌，
+    /// 不认 cookie（因为手机侧走的是局域网/Tailscale 的 Host，过不了 DSH 的 Host 校验）。
+    /// 之前这里漏传 token，直接 401，被映射成「需要先连接到电脑」（2026-11-16 踩到）。
+    static func fetchList(baseURL: URL, token: String) async throws -> [PluginMobileEntry] {
+        var components = URLComponents(
+            url: baseURL.appending(path: "dsh-plugin-panel/mobile/list"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "mt", value: token)]
+        guard let url = components?.url else { throw APIError.badResponse(-1) }
+        var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 10
 
