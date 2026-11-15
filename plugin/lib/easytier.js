@@ -294,3 +294,89 @@ export function shadowrocketConf({ socksHost, socksPort, portalCidr = '10.14.14.
     '',
   ].join('\n')
 }
+
+/** launchd 服务的 Label（固定，不随网络名变化）。 */
+export const EASYTIER_DAEMON_LABEL = 'com.ruska.dsh-pocket-ios.easytier'
+/** LaunchDaemon plist 路径：系统级，才能以 root 创建 TUN 虚拟网卡。 */
+export const EASYTIER_PLIST_PATH = `/Library/LaunchDaemons/${EASYTIER_DAEMON_LABEL}.plist`
+
+/**
+ * 生成 launchd plist，把 EasyTier 装成开机自启的后台服务。
+ *
+ * 为什么需要：原来的命令是 `sudo easytier-core ...` 手动跑，
+ * 关掉终端进程就挂、电脑重启就彻底没了——这让它稳定性远不如 Tailscale。
+ * 做成 LaunchDaemon 后：
+ *   RunAtLoad → 开机自启
+ *   KeepAlive → 进程挂掉自动拉起
+ * 这才是「配一次、长期不用管」。
+ *
+ * @param {{ corePath: string, networkName: string, networkSecret: string, ipv4: string, socksPort: number, logPath?: string }} opts
+ * @returns {string} plist XML
+ */
+export function launchdPlist({ corePath, networkName, networkSecret, ipv4, socksPort, logPath = '/tmp/easytier-dsh.log' }) {
+  // plist 里不能出现裸特殊字符，做最小转义
+  const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const args = [
+    corePath,
+    '--ipv4', ipv4,
+    '-d',
+    '--network-name', networkName,
+    '--network-secret', networkSecret,
+    '--socks5', String(socksPort),
+  ]
+  const argXml = args.map((a) => `        <string>${esc(a)}</string>`).join('\n')
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${EASYTIER_DAEMON_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+${argXml}
+    </array>
+    <!-- 开机自启 -->
+    <key>RunAtLoad</key>
+    <true/>
+    <!-- 进程异常退出自动重启 -->
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>${esc(logPath)}</string>
+    <key>StandardErrorPath</key>
+    <string>${esc(logPath)}</string>
+</dict>
+</plist>
+`
+}
+
+/**
+ * 生成「装成开机自启服务」的一键命令。
+ *
+ * 用 heredoc 写 plist + 先 bootout 再 bootstrap，避免重复加载报错。
+ *
+ * @param {Parameters<typeof launchdPlist>[0]} opts
+ * @returns {string}
+ */
+export function installServiceCommand(opts) {
+  const plist = launchdPlist(opts)
+  return [
+    `sudo tee ${EASYTIER_PLIST_PATH} > /dev/null <<'ET_PLIST_EOF'`,
+    plist.trimEnd(),
+    'ET_PLIST_EOF',
+    `sudo launchctl bootout system ${EASYTIER_PLIST_PATH} 2>/dev/null || true`,
+    `sudo launchctl bootstrap system ${EASYTIER_PLIST_PATH}`,
+    `sudo launchctl enable system/${EASYTIER_DAEMON_LABEL} 2>/dev/null || true`,
+  ].join('\n')
+}
+
+/**
+ * 生成「卸载开机自启服务」的命令（先停进程，再删 plist）。
+ * @returns {string}
+ */
+export function uninstallServiceCommand() {
+  return [
+    `sudo launchctl bootout system ${EASYTIER_PLIST_PATH} 2>/dev/null || true`,
+    `sudo rm -f ${EASYTIER_PLIST_PATH}`,
+  ].join('\n')
+}
