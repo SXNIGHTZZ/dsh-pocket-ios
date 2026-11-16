@@ -14,3 +14,6 @@ store/icon-candidates/
 store/header-candidates/
 store/screenshot-candidates/
 _promo-shots/
+
+# 本地参考记录：同类项目调研，不对外发布（不进 GitHub，也不进 npm 包）
+docs/参考项目/
