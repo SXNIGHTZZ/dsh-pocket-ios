@@ -49,12 +49,15 @@ struct ConversationView: View {
     /// 触发加载时是否已经贴在最顶部：此时加载完直接展示新一页，不做位置锚定。
     @State private var olderLoadWasAtTop = false
     @State private var showingJobs = false
-    @State private var showingPlugins = false
+    /// DEBUG 自动化：`DSH_DEV_OPEN=plugins` 时启动就弹出插件面板，
+    /// 让截图/端到端验证不必人工点。正式包里恒为 false（见 ConnectionModel.debugOpenPlugins）。
+    @State private var showingPlugins = ConnectionModel.debugOpenPlugins
     @State private var showingCamera = false
     @State private var showingPhotoPicker = false
     @State private var photoItems: [PhotosPickerItem] = []
     @FocusState private var composerFocused: Bool
-    @State private var copiedLogPath: String?
+    /// 复制后的短暂提示文字（2 秒消失）。nil 表示不显示。
+    @State private var copiedToast: String?
     @State private var showingModelPicker = false
 
     private struct TimelineEntry: Identifiable {
@@ -130,6 +133,14 @@ struct ConversationView: View {
         guard !model.isSending else { return false }
         return !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !model.draftImages.isEmpty
+    }
+
+    /// 复制成功：一次轻震动 + 一条「已复制」。
+    private func showCopied() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        withAnimation(PocketMotion.animation(.easeOut(duration: 0.2))) {
+            copiedToast = L10n.t("已复制")
+        }
     }
 
     var body: some View {
@@ -460,22 +471,35 @@ struct ConversationView: View {
                 PluginToolbarButton { showingPlugins = true }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                JobsToolbarButton { showingJobs = true }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
                 // 菜单项已拆到 ConversationMoreMenu.swift。
                 ConversationMoreMenu(model: model,
                                      showingModelPicker: $showingModelPicker,
-                                     onCopied: { copiedLogPath = $0 })
+                                     onCopied: { _ in showCopied() },
+                                     onShowJobs: { showingJobs = true })
             }
         }
-        .alert(L10n.t("已复制"), isPresented: Binding(
-            get: { copiedLogPath != nil },
-            set: { if !$0 { copiedLogPath = nil } }
-        )) {
-            Button(L10n.t("好"), role: .cancel) {}
-        } message: {
-            Text(copiedLogPath ?? "")
+        // 复制只给一条短暂提示，不打断操作。
+        // 之前是 alert：要用户点「好」，而复制是高频小动作，弹窗太重。
+        .overlay(alignment: .top) {
+            if let copiedToast {
+                Text(copiedToast)
+                    .font(.footnote.weight(.medium))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 0.5))
+                    .padding(.top, 6)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
+        }
+        // id 变化会取消上一次的计时，连续复制不会互相打断。
+        .task(id: copiedToast) {
+            guard copiedToast != nil else { return }
+            try? await Task.sleep(for: .seconds(2))
+            withAnimation(PocketMotion.animation(.easeOut(duration: 0.2))) {
+                copiedToast = nil
+            }
         }
         .sheet(isPresented: $showingJobs) {
             JobsSheet(model: model)

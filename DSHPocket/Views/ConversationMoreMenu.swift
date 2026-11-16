@@ -11,9 +11,26 @@ struct ConversationMoreMenu: View {
     @Binding var showingModelPicker: Bool
     /// 复制成功后把内容回传给父视图弹「已复制」。
     var onCopied: (String) -> Void
+    /// 打开后台任务。原先它是工具栏上的独立按钮，移到「更多」里省一格位置。
+    var onShowJobs: () -> Void
+
+    private var modelMenuTitle: String {
+        guard let name = model.selectedModelLabel else { return L10n.t("选择模型") }
+        if let effort = model.selectedReasoningLabel {
+            return L10n.t("模型") + "：" + name + " · " + effort
+        }
+        return L10n.t("选择模型") + "：" + name
+    }
 
     var body: some View {
         Menu {
+            // 导航类动作放最前面，和下面的复制/诊断分开。
+            Button {
+                onShowJobs()
+            } label: {
+                Label(L10n.t("后台任务"), systemImage: "checklist")
+            }
+            Divider()
             Button {
                 UIPasteboard.general.string = model.sessionAddress
                 onCopied(model.sessionAddress)
@@ -32,8 +49,8 @@ struct ConversationMoreMenu: View {
             Button {
                 showingModelPicker = true
             } label: {
-                Label(model.selectedModelLabel.map { L10n.t("选择模型") + "：" + $0 } ?? L10n.t("选择模型"),
-                      systemImage: "cpu")
+                // 模型 + 推理强度写在同一行：只显示模型会让人以为强度没生效。
+                Label(modelMenuTitle, systemImage: "cpu")
             }
             Button {
                 let report = model.diagnosticReport()

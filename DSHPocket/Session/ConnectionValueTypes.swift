@@ -61,11 +61,24 @@ struct PendingQuote: Identifiable, Equatable {
 enum PendingSendState { case sending, acked(steered: Bool), failed, queued }
 
 /// 模型选择器的值类型（从 ConnectionModel 嵌套类型外移）。
+/// 一个可选的推理强度。**id 是适配器定义的不透明字符串**，不是 low/medium/high，
+/// 所以既不能硬编码，也不能按名字排序——只能照宿主给的原样展示。
+struct ReasoningOption: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let detail: String?
+}
+
 struct ModelOption: Identifiable, Hashable {
     let provider: String
     let model: String
     let name: String
+    /// 这个模型支持的推理强度。空表示该模型不提供这个开关。
+    let reasoningEfforts: [ReasoningOption]
+    /// 宿主给的默认强度；nil 表示「提供方默认」。
+    let defaultEffort: String?
     var id: String { "\(provider)/\(model)" }
+    var hasReasoning: Bool { !reasoningEfforts.isEmpty }
 }
 
 struct ModelGroup: Identifiable {

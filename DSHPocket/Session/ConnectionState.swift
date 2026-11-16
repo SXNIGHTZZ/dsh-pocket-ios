@@ -17,7 +17,8 @@ final class ConnectionState {
     var serverAddress: String
 
     /// 访问 PIN。只存在内存：不落盘，退出即失效。
-    var pin = ""
+    /// DEBUG 下可被 `DSH_DEV_PIN` 预填，省去 UI 测试手输访问密码。
+    var pin = ConnectionModel.debugPin ?? ""
 
     var isConnecting = false
     var isConnected = false

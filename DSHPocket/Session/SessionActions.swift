@@ -58,8 +58,20 @@ extension ConnectionModel {
                       let name = group["name"] as? String else { return nil }
                 let models = (group["models"] as? [[String: Any]] ?? []).compactMap { item -> ModelOption? in
                     guard let model = item["id"] as? String else { return nil }
+                    // reasoning 是可选块：只有提供方公布强度的模型才有。
+                    let reasoning = item["reasoning"] as? [String: Any]
+                    let efforts = (reasoning?["efforts"] as? [[String: Any]] ?? []).compactMap { raw -> ReasoningOption? in
+                        guard let eid = raw["id"] as? String else { return nil }
+                        return ReasoningOption(
+                            id: eid,
+                            name: raw["name"] as? String ?? eid,
+                            detail: raw["description"] as? String
+                        )
+                    }
                     return ModelOption(provider: id, model: model,
-                                       name: item["name"] as? String ?? model)
+                                       name: item["name"] as? String ?? model,
+                                       reasoningEfforts: efforts,
+                                       defaultEffort: reasoning?["defaultEffort"] as? String)
                 }
                 return ModelGroup(id: id, name: name, models: models)
             }
@@ -77,19 +89,25 @@ extension ConnectionModel {
     }
 
     @MainActor
-    func selectModel(_ option: ModelOption) async {
+    /// 切换模型。`reasoningEffort` 只在模型公布强度时传；传 nil 表示「提供方默认」。
+    func selectModel(_ option: ModelOption, reasoningEffort: String? = nil) async {
         guard let session = sessionStore.selected else { return }
         if isDemoMode {
             selectedModelLabel = option.name
             return
         }
+        var request: [String: Any] = [
+            "sessionId": session.sessionId,
+            "provider": option.provider,
+            "model": option.model
+        ]
+        // 省略等于用提供方默认，所以 nil 时**不要**塞这个键。
+        if let reasoningEffort { request["reasoningEffort"] = reasoningEffort }
         do {
-            _ = try await rpcClient.rpcAdapted("session/selectModel", args: ["request": [
-                "sessionId": session.sessionId,
-                "provider": option.provider,
-                "model": option.model
-            ]])
+            _ = try await rpcClient.rpcAdapted("session/selectModel", args: ["request": request])
             selectedModelLabel = option.name
+            selectedReasoningLabel = option.reasoningEfforts
+                .first { $0.id == reasoningEffort }?.name
         } catch {
             reportActionError("切换模型失败：\(error.localizedDescription)")
         }

@@ -70,10 +70,55 @@ final class ConnectionModel {
     /// 字段用计算属性转发，约 140 处调用点暂不改；视图收敛留到批次 3。
     let connection = ConnectionState(
         // 地址优先从 UserDefaults 读；重装后沙盒被清，再从 Keychain 兜底恢复，避免每次重装都要重新扫码。
-        serverAddress: UserDefaults.standard.string(forKey: savedServerAddressKey)
+        serverAddress: ConnectionModel.debugServerOverride
+            ?? UserDefaults.standard.string(forKey: savedServerAddressKey)
             ?? ConnectionVault.loadAddress()
             ?? "http://"
     )
+
+    /// DEBUG 自动化：`DSH_DEV_SERVER` 直接顶掉已存地址，`DSH_DEV_AUTOCONNECT=1` 时启动即连。
+    ///
+    /// 为什么需要：手机端插件面板的端到端验证要先连上电脑，而连接要手输地址和访问密码。
+    /// 有了这两个入口，截图和 UI 测试就能全自动，不必人工点一遍。
+    /// **只读 DEBUG 环境变量**，正式包这段恒为 nil / false。
+    static var debugServerOverride: String? {
+#if DEBUG
+        let raw = (ProcessInfo.processInfo.environment["DSH_DEV_SERVER"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? nil : raw
+#else
+        return nil
+#endif
+    }
+
+    /// DEBUG 下是否要启动即自动连接。
+    static var debugAutoConnect: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.environment["DSH_DEV_AUTOCONNECT"] == "1"
+#else
+        false
+#endif
+    }
+
+    /// DEBUG 下是否一启动就弹出插件面板（截图/UI 验证用）。
+    static var debugOpenPlugins: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.environment["DSH_DEV_OPEN"] == "plugins"
+#else
+        false
+#endif
+    }
+
+    /// DEBUG 下自动填的访问密码。
+    static var debugPin: String? {
+#if DEBUG
+        let raw = (ProcessInfo.processInfo.environment["DSH_DEV_PIN"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? nil : raw
+#else
+        return nil
+#endif
+    }
     var isDemoMode = false
     /// 会话列表与缓存的唯一真相（spec/12 第五个对象）。调用点走转发。
     let sessionStore = SessionStore()
@@ -500,6 +545,8 @@ final class ConnectionModel {
     /// 最近一次被归档的会话（用于列表底部「撤销」）。
     var modelGroups: [ModelGroup] = []
     var selectedModelLabel: String?
+    /// 当前推理强度的人话名（模型没公布强度时为 nil）。只用于展示。
+    var selectedReasoningLabel: String?
 
     /// 会话地址（用于复制给其他 Agent / 自己记录）。
     var sessionAddress: String {

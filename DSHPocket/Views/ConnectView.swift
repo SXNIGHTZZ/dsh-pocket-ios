@@ -255,6 +255,7 @@ struct ConnectView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 TextField("http://192.168.1.10:3081", text: $connection.serverAddress)
+                    .accessibilityIdentifier("connect-address")
                     .accessibilityLabel(L10n.t("电脑地址"))
                     .accessibilityHint(L10n.t("粘贴 DSH「手机访问」页上的地址，或直接扫码"))
                     .keyboardType(.URL)
@@ -281,10 +282,12 @@ struct ConnectView: View {
                 Group {
                     if showingPin {
                         TextField(L10n.t("访问密码（扫码连接可跳过）"), text: $connection.pin)
+                            .accessibilityIdentifier("connect-pin")
                             .accessibilityLabel(L10n.t("访问密码"))
                             .accessibilityHint(L10n.t("8 到 64 位英文字母或数字，在电脑的「手机访问」页上"))
                     } else {
                         SecureField(L10n.t("访问密码（扫码连接可跳过）"), text: $connection.pin)
+                            .accessibilityIdentifier("connect-pin")
                     }
                 }
                 .textContentType(.password)

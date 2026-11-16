@@ -24,6 +24,9 @@ enum PluginMobileAPI {
         let catalog: PluginMobileCatalog
         /// 实际走的通道，出错时能说清楚是哪条。
         let channel: String
+
+        /// 这条通道能不能给原生列表用（只有新通道有 /installed 和 /toggle）。
+        var supportsNativeList: Bool { channel == PluginMobileAPI.nativeChannel }
     }
 
     enum APIError: LocalizedError {
@@ -116,8 +119,98 @@ enum PluginMobileAPI {
         throw APIError.notAuthenticated
     }
 
-    /// 拼出给 WebView 的完整地址：`{address}{path}?mt={token}`。
+    /// 原生列表用：全部已装插件（含启用状态）。
     ///
+    /// **只有新通道有**这个端点。旧通道（`dsh-plugin-panel`）只有 HTML 列表页，
+    /// 所以走旧通道时 App 会退回「加载它的页面」，而不是原生列表。
+    static func fetchInstalled(baseURL: URL, token: String) async throws -> PluginInstalledCatalog {
+        let json = try await getJSON(baseURL: baseURL, channel: nativeChannel, path: "installed", token: token)
+        return PluginInstalledCatalog.parse(json)
+    }
+
+    /// 开关插件。**写操作**——用新通道自己的 token（panel 的端点只认它自己签的）。
+    ///
+    /// 注意：`dsh-pocket-ios` 不能关自己（它是手机连接通道），服务端会返回 409。
+    /// 切换结果。`note` 非空时**必须显示给用户**：
+    /// DSH 没有 HMR 时开关只写配置，要重启才生效——不说就是骗人。
+    struct ToggleOutcome: Equatable, Sendable {
+        let note: String
+        let restartRequired: Bool
+    }
+
+    @discardableResult
+    static func setPluginEnabled(
+        baseURL: URL,
+        token: String,
+        module: String,
+        enabled: Bool
+    ) async throws -> ToggleOutcome {
+        var components = URLComponents(
+            url: baseURL.appending(path: "\(nativeChannel)/toggle"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "mt", value: token)]
+        guard let url = components?.url else { throw APIError.badResponse(-1) }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(
+            withJSONObject: ["name": module, "enabled": enabled]
+        )
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.badResponse(-1) }
+        if http.statusCode == 401 || http.statusCode == 403 { throw APIError.notAuthenticated }
+        guard (200..<300).contains(http.statusCode) else {
+            // 把服务端的原因带出来（比如「不能关闭 dsh-pocket-ios 自身」），
+            // 否则用户只看到 409 不知道为什么不给关。
+            let detail = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            if let message = detail?["error"] as? String, !message.isEmpty {
+                throw APIError.noAggregator(message)
+            }
+            throw APIError.badResponse(http.statusCode)
+        }
+
+        // 服务端会带回 application / restartReason / note，用来告诉用户「其实还没生效」。
+        let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let application = (payload?["application"] as? String) ?? ""
+        let note = (payload?["note"] as? String) ?? ""
+        return ToggleOutcome(
+            note: note,
+            restartRequired: application == "restart-required"
+        )
+    }
+
+    /// 新通道前缀。原生列表和开关只在这个通道上有。
+    static var nativeChannel: String { PluginMobileChannelPolicy.channels[0] }
+
+    /// 走新通道的 GET + JSON 解析（不传 token 时用 `nonisolated` 之外的调用方自己加）。
+    private static func getJSON(
+        baseURL: URL,
+        channel: String,
+        path: String,
+        token: String
+    ) async throws -> Any {
+        var components = URLComponents(
+            url: baseURL.appending(path: "\(channel)/\(path)"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "mt", value: token)]
+        guard let url = components?.url else { throw APIError.badResponse(-1) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 10
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.badResponse(-1) }
+        if http.statusCode == 401 || http.statusCode == 403 { throw APIError.notAuthenticated }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.badResponse(http.statusCode) }
+        return (try? JSONSerialization.jsonObject(with: data)) ?? [:]
+    }
+
+    /// 拼出给 WebView 的完整地址：`{address}{path}?mt={token}`。
     /// 注意 `path` 来自插件声明，可能是相对路径（`/dsh-plugin-panel/mobile`），
     /// 也可能带查询串——这里统一按「拼到 baseURL 后」处理，不做字符串切割。
     static func pageURL(baseURL: URL, path: String, token: String) -> URL? {

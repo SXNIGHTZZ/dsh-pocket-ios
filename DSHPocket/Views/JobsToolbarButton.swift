@@ -43,6 +43,7 @@ struct PluginToolbarButton: View {
             Image(systemName: "puzzlepiece.extension")
         }
         .accessibilityLabel(L10n.t("插件"))
+        .accessibilityIdentifier("plugin-button")
     }
 }
 

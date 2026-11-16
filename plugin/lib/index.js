@@ -281,6 +281,127 @@ async function readMobileManifests(pluginManager) {
 }
 
 /**
+ * 读一个插件的本地化标题和简介。
+ *
+ * 只取 `locale/*.json` 的 `meta.title` / `meta.description`，回退 `package.json`。
+ * 刻意不复刻「长文 detail / README 首段」——原生列表卡片只要一两行简介。
+ *
+ * 规则和 DSH 启动时一致：`locale/en.json` 是入口，不存在就整个不加载。
+ */
+function readPluginTexts(dir, acceptLanguage) {
+  let fallbackTitle = ''
+  let fallbackDescription = ''
+  try {
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    if (typeof pkg.name === 'string') fallbackTitle = pkg.name.trim()
+    if (typeof pkg.description === 'string') fallbackDescription = pkg.description.trim()
+  } catch { /* 坏包：全靠 locale */ }
+
+  const dicts = new Map()
+  const localeDir = join(dir, 'locale')
+  try {
+    if (existsSync(join(localeDir, 'en.json'))) {
+      for (const entry of readdirSync(localeDir, { withFileTypes: true })) {
+        if (!entry.isFile() || !entry.name.endsWith('.json')) continue
+        try {
+          const dict = JSON.parse(readFileSync(join(localeDir, entry.name), 'utf8'))
+          const meta = dict?.meta ?? {}
+          dicts.set(entry.name.replace(/\.json$/, ''), {
+            title: typeof meta.title === 'string' ? meta.title.trim() : '',
+            description: typeof meta.description === 'string' ? meta.description.trim() : '',
+          })
+        } catch { /* 坏 json 跳过 */ }
+      }
+    }
+  } catch { /* 没有 locale 目录 */ }
+
+  // 手机请求可能带 zh-CN / zh-Hans-CN / en。取到语言主标签再匹配。
+  const requested = String(acceptLanguage ?? '').toLowerCase()
+  const isEnglish = requested.startsWith('en')
+  const zh = dicts.get('zh') || dicts.get('zh-Hans') || {}
+  const en = dicts.get('en') || {}
+  const chosen = isEnglish ? (en.title ? en : zh) : (zh.title ? zh : en)
+
+  return {
+    title: chosen.title || en.title || fallbackTitle,
+    description: chosen.description || en.description || fallbackDescription,
+  }
+}
+
+/**
+ * 全部已装插件——原生列表要显示开关，所以**不只是**声明了 mobile 的那些。
+ *
+ * 字段说明：
+ * - `enabled`：来自 `listPlugins()`（`listBundles()` 没有这个字段，别用错）
+ * - `mobilePath`：有值才显示「打开」按钮
+ */
+async function readInstalledPlugins(pluginManager, acceptLanguage) {
+  const out = []
+  if (!pluginManager || typeof pluginManager.listBundles !== 'function') return out
+
+  let bundles = []
+  try {
+    bundles = await pluginManager.listBundles()
+  } catch {
+    return out
+  }
+
+  const states = new Map()
+  if (typeof pluginManager.listPlugins === 'function') {
+    try {
+      const list = await pluginManager.listPlugins()
+      for (const plugin of Array.isArray(list) ? list : []) {
+        const name = plugin?.moduleName || plugin?.name
+        if (typeof name !== 'string' || !name) continue
+        states.set(name, {
+          entryId: typeof plugin.entryId === 'string' ? plugin.entryId : '',
+          enabled: plugin.enabled !== false,
+          // 配置上启用 ≠ 实际在跑：fiberPhase 才是运行状态。
+          fiberPhase: typeof plugin.fiberPhase === 'string' ? plugin.fiberPhase : '',
+          diagnostic: typeof plugin.diagnostic === 'string' ? plugin.diagnostic : '',
+          // 只读条目（受管理/不可寻址）不能让手机改，交换开会失败。
+          readOnlyReason: typeof plugin.readOnlyReason === 'string' ? plugin.readOnlyReason : '',
+        })
+      }
+    } catch { /* 读不到就当作全部启用 */ }
+  }
+
+  for (const bundle of Array.isArray(bundles) ? bundles : []) {
+    const moduleName = typeof bundle?.name === 'string' ? bundle.name : ''
+    if (!moduleName) continue
+    // DSH 自带的包不列（和桌面端面板一致）
+    if (moduleName.startsWith('@deepseek-ai/') || moduleName.startsWith('cordis:')) continue
+
+    const dir = resolvePackageDir(moduleName)
+    if (dir === null) continue
+
+    const texts = readPluginTexts(dir, acceptLanguage)
+    let mobilePath = ''
+    try {
+      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+      const candidate = pkg?.dsh?.mobile?.path
+      if (typeof candidate === 'string' && candidate.startsWith('/')) mobilePath = candidate
+    } catch { /* 没有声明就没有打开按钮 */ }
+
+    out.push({
+      module: moduleName,
+      title: texts.title || moduleName,
+      version: typeof bundle.version === 'string' ? bundle.version : '',
+      description: texts.description,
+      // 关键：listBundles 会列出「装了但没启用」的 bundle（此时它不在 listPlugins 里）。
+      // 查不到状态 = 这个条目根本没被 Loader 加载 = 未启用。
+      // 之前写 `?? true`，把「查不到」当成「启用」，于是列表上所有插件全显示开着。
+      enabled: states.get(moduleName)?.enabled ?? false,
+      fiberPhase: states.get(moduleName)?.fiberPhase ?? '',
+      diagnostic: states.get(moduleName)?.diagnostic ?? '',
+      readOnlyReason: states.get(moduleName)?.readOnlyReason ?? '',
+      mobilePath,
+    })
+  }
+  return out
+}
+
+/**
  * 挂载插件移动端聚合路由。
  *
  * 单独成一个函数、由 apply 用 `ctx.inject(['pluginManager'])` 挂载：
@@ -332,6 +453,90 @@ export function registerPluginAggregator(ctx) {
       if (url.pathname === `${PLUGIN_CHANNEL}/list`) {
         const { plugins, invalid } = await readMobileManifests(pluginManager)
         sendJson(200, { version: MOBILE_PROTOCOL_VERSION, plugins, invalid })
+        return
+      }
+
+      // ③ 原生列表用：全部已装插件（含 enabled），不只是声明了 mobile 的
+      if (url.pathname === `${PLUGIN_CHANNEL}/installed`) {
+        const plugins = await readInstalledPlugins(pluginManager, req.headers['accept-language'])
+        sendJson(200, { version: MOBILE_PROTOCOL_VERSION, plugins })
+        return
+      }
+
+      // ④ 开关插件。这是**写操作**，所以只在严格校验过 token 之后才走到这里。
+      if (url.pathname === `${PLUGIN_CHANNEL}/toggle`) {
+        if (req.method !== 'POST') {
+          sendJson(405, { ok: false, error: 'method not allowed' })
+          return
+        }
+        let payload = {}
+        try {
+          // readBody 内部已经 JSON.parse 过了，这里再解析一次会对「对象」调 JSON.parse
+          // → 抛错 → 一律返回 bad body。开关因此**永远失败**（App 收到 400 就回滚）。
+          payload = (await readBody(req)) ?? {}
+        } catch {
+          sendJson(400, { ok: false, error: 'bad body' })
+          return
+        }
+        const name = typeof payload.name === 'string' ? payload.name : ''
+        const enabled = payload.enabled === true
+        if (!name) {
+          sendJson(400, { ok: false, error: 'missing name' })
+          return
+        }
+        // **不能关自己**：这个插件就是手机的连接通道（3091 代理 + PIN），
+        // 关掉之后 App 直接失联，连把它开回来的入口都没有。
+        if (name === 'dsh-pocket-ios' && !enabled) {
+          sendJson(409, { ok: false, error: '不能关闭 dsh-pocket-ios 自身：它是手机连接的通道' })
+          return
+        }
+        try {
+          let entryId = ''
+          if (typeof pluginManager?.listPlugins === 'function') {
+            const list = await pluginManager.listPlugins()
+            for (const plugin of Array.isArray(list) ? list : []) {
+              const moduleName = plugin?.moduleName || plugin?.name
+              if (moduleName === name && typeof plugin.entryId === 'string') {
+                entryId = plugin.entryId
+                break
+              }
+            }
+          }
+          // 两种条目要分开处理：
+          //   ① 已加载 → 有 entryId，用 setPluginEnabled（条目级）
+          //   ② 未加载 → 它所属的 bundle 没被选中，setPluginEnabled 会抛 unknown-plugin，
+          //      必须用 setBundleEnabled（bundle 级，会顺手 publish + reload）
+          let result
+          if (entryId) {
+            result = await pluginManager.setPluginEnabled(entryId, enabled)
+          } else if (typeof pluginManager.setBundleEnabled === 'function') {
+            result = await pluginManager.setBundleEnabled(name, enabled)
+          } else {
+            sendJson(400, { ok: false, error: '这个插件需要先在电脑端启用' })
+            return
+          }
+          const application = typeof result?.application === 'string' ? result.application : ''
+          const restartReason = typeof result?.restartReason === 'string' ? result.restartReason : ''
+          const failed = application === 'failed' || application === 'cancelled' || result?.error != null
+          sendJson(failed ? 500 : 200, {
+            ok: !failed,
+            module: name,
+            enabled,
+            application,
+            restartReason,
+            // 给 App 一句能直接显示的话（空 = 立即生效，不用提示）
+            note: application === 'restart-required'
+              ? '已保存，重启 DSH 后生效'
+              : application === 'overridden'
+                ? '被更高优先级的配置覆盖，未生效'
+                : application === 'failed'
+                  // 带上具体原因：ManagementError 里是 code + detail 之类，别只报「切换失败」。
+                  ? String(result?.error?.message ?? result?.error?.code ?? result?.error ?? '切换失败')
+                  : '',
+          })
+        } catch (error) {
+          sendJson(500, { ok: false, error: String(error?.message ?? error) })
+        }
         return
       }
       sendJson(404, { ok: false, error: 'not found' })

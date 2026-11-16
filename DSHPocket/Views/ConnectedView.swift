@@ -25,6 +25,8 @@ struct ConnectedView: View {
     @State private var didAutoOpen = false
     @State private var searchText = ""
     @State private var showsWorkspacePicker = false
+    /// 插件面板入口（会话列表页）。详情页也有一个，两处都通向同一个面板。
+    @State private var showingPlugins = false
     /// 正在拖动的工作区分组 id（cwd 路径）；nil 表示没在拖。
     @State private var showsWorkspaceReorder = false
     @State private var reorderOptions: [PocketWorkspace] = []
@@ -355,16 +357,23 @@ struct ConnectedView: View {
                 }
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { model.toggleCompletionAlerts() } label: {
-                    Image(systemName: model.completionAlertsEnabled ? "bell" : "bell.slash")
+                // 完成提醒开关已移到「设置」里，这里不再放第二个入口。
+                Button { showingPlugins = true } label: {
+                    Image(systemName: "puzzlepiece.extension")
                 }
-                .accessibilityLabel(L10n.t(model.completionAlertsEnabled ? "关闭完成提醒" : "开启完成提醒"))
+                .accessibilityLabel(L10n.t("插件"))
                 Button { openWorkspacePicker() } label: {
                     Image(systemName: "plus")
                         .font(.headline.weight(.semibold))
                 }
                 .pocketSystemGlassButton()
                 .accessibilityLabel(L10n.t("新建会话"))
+            }
+        }
+        .sheet(isPresented: $showingPlugins) {
+            // 地址无效时不打开（例如还没连上），避免弹一个必然失败的空白页。
+            if let baseURL = try? ConnectionModel.serverURL(from: model.connection.serverAddress) {
+                PluginPanelSheet(baseURL: baseURL)
             }
         }
         .sheet(isPresented: $showsWorkspacePicker) {

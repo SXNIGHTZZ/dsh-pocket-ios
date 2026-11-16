@@ -32,6 +32,12 @@ struct DSHPocketApp: App {
         WindowGroup {
             RootView(model: model, sessionStore: model.sessionStore)
                 .preferredColorScheme(.light)
+                .task {
+                    // DEBUG 自动化：地址和密码都从环境变量来，启动即连，
+                    // 供手机端插件面板的截图/端到端验证使用（正式包恒为 false）。
+                    guard ConnectionModel.debugAutoConnect else { return }
+                    await model.connect()
+                }
         }
     }
 }
