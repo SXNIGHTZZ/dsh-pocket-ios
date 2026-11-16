@@ -20,7 +20,13 @@
 | --- | --- | --- | --- |
 | L0 | 不声明 `dsh.mobile` | 列表可见，无「打开」 | 0 |
 | L1 | `kind: "web"` + HTML | WebView 打开 | 会 HTML |
-| L2 | `kind: "native"` + JSON schema | 原生渲染 | 学一套 JSON |
+| L1.5 | L1 + 调 JS Bridge | 同上，且能用分享/相册/震动 | 0（还是写 JS） |
+| L2a | 声明 volatile config（本来就要写） | 原生配置表单 | **0** |
+| L2b | `kind: "native"` + 内容 DSL | 原生渲染内容 | 学一套 JSON |
+
+**L2 拆成 a/b 是关键**：L2a 复用 DSH 已有的 `settings` schema（`remote.settings.describe` /
+`mutate`，官方文档明说「供按 schema 生成页面的客户端使用；目前没有已发布的客户端这样做」），
+作者零投入、中等工作量；L2b 才需要自建 UI DSL，是重工程。
 
 **L0 目前不回退展示桌面端 UI，但这不等于做不到**：桌面插件面板虽无独立 URL，
 但 DSH Web 的类名是语义化的、布局靠 CSS 变量、右侧栏状态存在稳定的 localStorage key，
@@ -112,6 +118,34 @@ rm -rf /tmp/dd-fresh && xcodebuild build -scheme DSHPocket \
 
 另外：`Dictionary(uniqueKeysWithValues:)` 遇到重复 key 是 **fatalError**（不是可选失败）。
 服务端返回的列表可能重复，一律改用 `Dictionary(_:uniquingKeysWith:)`。
+
+## 3.7 查 DSH 行为：先读源码，不要猜
+
+**DSH 是开源的（MIT）**：<https://github.com/deepseek-ai/deepseek-harness>
+
+它的 `packages/**/README.zh.md` 写得非常细——接口签名、限制、已知问题、
+甚至「我们在等客户端做什么」都有。**比读打包产物靠谱得多**。
+
+查证顺序：
+
+1. **GitHub 的 `README.zh.md`**（`raw.githubusercontent.com` + 具体 commit 才拿得到纯文本；
+   `github.com/.../blob/...` 返回的是 HTML 页面，会被截断）
+2. **`packages/**/src/*.ts`** 源码，确认签名和边界
+3. **本机 `app.asar`**（`npx asar extract`）—— minified，只用来确认「运行时装了什么」
+
+**踩过的教训（2026-11-16）**：为确认「DSH 是否暴露插件配置 schema」，
+先在 asar 的 minified 代码里翻了很久没找到结论，还据此写过「大概没有」。
+读了源码后一次查清：`remote.settings.describe / mutate` 早就存在，
+而且官方文档明说「供按 schema 生成页面的客户端使用；**目前没有已发布的客户端这样做**」。
+
+```bash
+# 拿纯文本 README 的正确写法（blob 链接不行）
+C=<commit-sha>
+curl -sS "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/$C/packages/settings/settings/README.zh.md"
+
+# 列目录用 API
+curl -sS "https://api.github.com/repos/deepseek-ai/deepseek-harness/contents/packages/boot?ref=$C"
+```
 
 ## 4. 硬性禁止
 
