@@ -5,9 +5,12 @@
  * 3) 通过 webServer 暴露 `/dsh-pocket-ios/tailscale.status` 给设置页卡片。
  */
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { randomInt } from 'node:crypto'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { createServer, request as httpRequest } from 'node:http'
 import { promisify } from 'node:util'
@@ -22,6 +25,57 @@ export const name = 'dsh-pocket-ios'
 export const inject = ['connection', 'webServer']
 
 const CHANNEL = '/dsh-pocket-ios'
+
+/**
+ * 插件移动端聚合通道。
+ *
+ * **为什么放在这个插件里而不是 dsh-plugin-panel**：
+ * 这个插件是用户装了 App 就**必须**装的那一个（它开 3091 代理、管 PIN 和配对），
+ * 而插件管理是选装包——App Store 用户按安装文档只会装这一个，
+ * 把聚合能力放在选装包里，等于让「插件」按钮对默认用户不可用（2026-11-16 确认）。
+ *
+ * DSH 内核没有对外的插件列表 API（`/plugins/*` 只是 client 资源路由），
+ * 所以这个能力只能由插件提供，放这里最合适：token 签发本来就该和 PIN/配对在一起。
+ */
+const PLUGIN_CHANNEL = '/dsh-pocket/plugins'
+/** 移动端一次性 token 的有效期，和 dsh-plugin-panel 保持一致。 */
+const MOBILE_TOKEN_TTL_MS = 5 * 60 * 1000
+/** token 形状：32 位 base64url。别的插件签的也长这样，所以只用来验格式。 */
+const MOBILE_TOKEN_RE = /^[A-Za-z0-9_-]{32}$/
+/** 本插件签发的 token → 过期时间。只校验自己签的，别处的 token 无从校验。 */
+const mobileTokens = new Map()
+/** 换 token 的限流桶：IP → 最近一分钟的时间戳。 */
+const mobileMintBuckets = new Map()
+
+/**
+ * token 端点的限流：每 IP 每分钟 10 次。
+ *
+ * **这个端点不能做 DSH 的 Host 校验**：手机走的是局域网/Tailscale 的 Host，
+ * `connection.requestRejection` 一律拒绝（它只信任 loopback / trustedHosts）。
+ * 2026-11-16 我先写了 requestRejection，结果手机端永远拿不到 token——
+ * 和最早 `dsh-plugin-panel` 踩的是同一个坑。
+ *
+ * 安全性靠「限流 + token 短期 + 只读数据」兜底：token 只用于列插件（不含凭证），
+ * 5 分钟过期、只存内存。
+ */
+function allowMobileMint(req) {
+  const ip = String(req.socket?.remoteAddress ?? 'unknown')
+  const now = Date.now()
+  const windowStart = now - 60_000
+  const hits = (mobileMintBuckets.get(ip) ?? []).filter((t) => t > windowStart)
+  if (hits.length >= 10) {
+    mobileMintBuckets.set(ip, hits)
+    return false
+  }
+  hits.push(now)
+  mobileMintBuckets.set(ip, hits)
+  if (mobileMintBuckets.size > 64) {
+    for (const [key, list] of mobileMintBuckets) {
+      if (list.every((t) => t <= windowStart)) mobileMintBuckets.delete(key)
+    }
+  }
+  return true
+}
 /**
  * EasyTier WireGuard 门户端口。
  * **不能落在 11010–11013**：EasyTier 默认已在那几个端口上监听
@@ -64,6 +118,225 @@ const pairTokens = new Map()
 function generatePairToken() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
   return Array.from({ length: 32 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+}
+
+// ── 插件移动端聚合 ───────────────────────────────────────────────────
+
+/** 签发一个移动端 token（5 分钟）。顺手清过期的，避免 Map 无限增长。 */
+function mintMobileToken() {
+  const token = generatePairToken()
+  const now = Date.now()
+  for (const [key, expiresAt] of mobileTokens) if (expiresAt < now) mobileTokens.delete(key)
+  mobileTokens.set(token, now + MOBILE_TOKEN_TTL_MS)
+  return token
+}
+
+/**
+ * 只认**本插件签发**的 token。
+ *
+ * 为什么不像插件页面那样只验格式：这里是发 token 的一方，
+ * 必须能拒绝伪造/过期的。插件页面（比如音频解析）收到的是我们签的 token，
+ * 它们只验格式是合理的——它们无从校验别处的签发记录。
+ */
+function mobileTokenValid(token) {
+  if (typeof token !== 'string' || token.length !== 32) return false
+  const expiresAt = mobileTokens.get(token)
+  if (expiresAt === undefined) return false
+  if (expiresAt < Date.now()) {
+    mobileTokens.delete(token)
+    return false
+  }
+  return true
+}
+
+const bundleRequire = createRequire(import.meta.url)
+
+/**
+ * 可能的 node_modules 根，按可靠性排序。
+ *
+ * 为什么要扫 profile：插件常常是**指向源码目录的符号链接**，
+ * `import.meta.url` 解析到的是源码目录，从它推不出 DSH 装包的位置。
+ */
+function packageRoots() {
+  const roots = []
+  try {
+    let dir = dirname(fileURLToPath(import.meta.url))
+    for (let i = 0; i < 8; i += 1) {
+      if (dir.endsWith('node_modules')) {
+        roots.push(dir)
+        break
+      }
+      const parent = dirname(dir)
+      if (parent === dir) break
+      dir = parent
+    }
+  } catch { /* 推不出来就走 profiles */ }
+
+  const profilesRoot = join(homedir(), '.dsh', 'profiles')
+  try {
+    for (const entry of readdirSync(profilesRoot, { withFileTypes: true })) {
+      if (entry.isDirectory()) roots.push(join(profilesRoot, entry.name, 'node_modules'))
+    }
+  } catch { /* 没有 profiles 目录 */ }
+  return [...new Set(roots)]
+}
+
+/** 从包名找包目录：Node 解析链优先，被 exports 挡住时再逐个根去找。 */
+function resolvePackageDir(name) {
+  try {
+    return dirname(bundleRequire.resolve(`${name}/package.json`))
+  } catch { /* 被 exports 挡住 */ }
+  try {
+    let dir = dirname(bundleRequire.resolve(name))
+    for (let i = 0; i < 6; i += 1) {
+      if (existsSync(join(dir, 'package.json'))) return dir
+      const parent = dirname(dir)
+      if (parent === dir) break
+      dir = parent
+    }
+  } catch { /* 解析不了 */ }
+  for (const root of packageRoots()) {
+    const dir = join(root, name)
+    if (existsSync(join(dir, 'package.json'))) return dir
+  }
+  return null
+}
+
+/** kind 的合法值（协议 v1）。 */
+const MOBILE_KINDS = new Set(['web', 'native'])
+/** App 支持的 dsh.mobile 协议版本。 */
+const MOBILE_PROTOCOL_VERSION = 1
+
+/**
+ * 扫出所有声明了 `dsh.mobile` 的插件。
+ *
+ * 协议校验规则和 `dsh-plugin-panel` 的实现保持一致——App 两边都能解析，
+ * 漂移会让「同一份声明在一处有效、另一处被过滤」。
+ *
+ * @param pluginManager - DSH 内核的插件管理 service（不是任何第三方插件）。
+ * @returns `{ plugins, invalid }`，invalid 带原因，好让 App 说出「哪里不合格」。
+ */
+async function readMobileManifests(pluginManager) {
+  const plugins = []
+  const invalid = []
+  if (!pluginManager || typeof pluginManager.listBundles !== 'function') return { plugins, invalid }
+
+  let bundles = []
+  try {
+    bundles = await pluginManager.listBundles()
+  } catch {
+    return { plugins, invalid }
+  }
+
+  for (const bundle of Array.isArray(bundles) ? bundles : []) {
+    const moduleName = typeof bundle?.name === 'string' ? bundle.name : ''
+    if (!moduleName) continue
+    // DSH 自带的包和内核条目不列（和桌面端的面板一致）
+    if (moduleName.startsWith('@deepseek-ai/') || moduleName.startsWith('cordis:')) continue
+
+    const dir = resolvePackageDir(moduleName)
+    if (dir === null) continue
+    let pkg
+    try {
+      pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+    } catch { continue }
+
+    const mobile = pkg?.dsh?.mobile
+    if (mobile === undefined || mobile === null) continue
+    if (typeof mobile !== 'object' || Array.isArray(mobile)) {
+      invalid.push({ module: moduleName, title: moduleName, problems: ['dsh.mobile 必须是对象'] })
+      continue
+    }
+
+    const problems = []
+    const version = Number(mobile.version)
+    if (!Number.isFinite(version)) problems.push('dsh.mobile.version 缺失')
+    else if (version > MOBILE_PROTOCOL_VERSION) {
+      problems.push(`dsh.mobile.version=${version} 高于 App 支持的 ${MOBILE_PROTOCOL_VERSION}`)
+    }
+
+    const kind = typeof mobile.kind === 'string' ? mobile.kind.trim() : ''
+    if (!MOBILE_KINDS.has(kind)) problems.push('dsh.mobile.kind 必须是 web 或 native')
+
+    const title = typeof mobile.title === 'string' ? mobile.title.trim() : ''
+    if (title === '') problems.push('dsh.mobile.title 缺失')
+
+    const mobilePath = typeof mobile.path === 'string' ? mobile.path.trim() : ''
+    if (kind === 'web') {
+      if (mobilePath === '') problems.push('kind=web 但 dsh.mobile.path 缺失')
+      else if (!mobilePath.startsWith('/')) problems.push('dsh.mobile.path 必须以 / 开头')
+    } else if (kind === 'native') {
+      // Schema 渲染器在 App 里还没实现；照实返回，让 App 能给出「需要更新版本」的提示
+      const schema = typeof mobile.schema === 'string' ? mobile.schema.trim() : ''
+      if (schema === '') problems.push('kind=native 但 dsh.mobile.schema 缺失')
+    }
+
+    if (problems.length > 0) {
+      invalid.push({ module: moduleName, title: title || moduleName, problems })
+      continue
+    }
+    plugins.push({ module: moduleName, title, version, kind, path: mobilePath })
+  }
+  return { plugins, invalid }
+}
+
+/**
+ * 挂载插件移动端聚合路由。
+ *
+ * 单独成一个函数、由 apply 用 `ctx.inject(['pluginManager'])` 挂载：
+ * `pluginManager` 不可用时只是这个能力不生效，**不能连累主插件**
+ * （PIN、配对、代理都在这个插件里）。
+ */
+export function registerPluginAggregator(ctx) {
+  const webServer = ctx?.webServer
+  const pluginManager = ctx?.pluginManager
+  if (!webServer || typeof webServer.register !== 'function') return () => {}
+
+  return webServer.register({
+    kind: 'prefix',
+    path: PLUGIN_CHANNEL,
+    handler: async (req, res) => {
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+      const sendJson = (status, payload) => {
+        res.writeHead(status, {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+        })
+        res.end(JSON.stringify(payload))
+      }
+
+      // ① 换 token：**不做 Host 校验**，靠限流（见 allowMobileMint 的注释）
+      if (url.pathname === `${PLUGIN_CHANNEL}/token`) {
+        if (req.method !== 'POST') {
+          sendJson(405, { ok: false, error: 'method not allowed' })
+          return
+        }
+        if (!allowMobileMint(req)) {
+          sendJson(429, { ok: false, error: '请求太频繁，请稍后再试' })
+          return
+        }
+        sendJson(200, {
+          token: mintMobileToken(),
+          expiresIn: Math.round(MOBILE_TOKEN_TTL_MS / 1000),
+        })
+        return
+      }
+
+      // ② 其余端点只认本插件签发的 token（WebView 带不上 cookie）
+      const token = url.searchParams.get('mt')
+      if (!mobileTokenValid(token)) {
+        sendJson(401, { ok: false, error: '请从 DSH Pocket App 内打开' })
+        return
+      }
+
+      if (url.pathname === `${PLUGIN_CHANNEL}/list`) {
+        const { plugins, invalid } = await readMobileManifests(pluginManager)
+        sendJson(200, { version: MOBILE_PROTOCOL_VERSION, plugins, invalid })
+        return
+      }
+      sendJson(404, { ok: false, error: 'not found' })
+    },
+  })
 }
 
 /**
@@ -1012,5 +1285,28 @@ function guessProto(req, host) {
   } catch (error) {
     ctx?.logger?.warn?.(`dsh-pocket-ios: 挂载 RPC 失败：${String(error?.message ?? error)}`)
   }
+
+  // 插件移动端聚合。**用独立的 inject 作用域**：`pluginManager` 不可用时
+  // 只是这个能力不挂载，PIN/配对/代理照常工作。
+  // 教训来自 2026-11-16：给 dsh-plugin-panel 加工具时把注册写在主流程里，
+  // 一抛错整个插件就不加载，所有路由变 405。
+  try {
+    if (typeof ctx?.inject === 'function') {
+      ctx.inject(['pluginManager'], (scoped) => {
+        const dispose = registerPluginAggregator(scoped)
+        if (typeof scoped?.effect === 'function') {
+          scoped.effect(() => dispose, 'dsh-pocket-ios: 插件移动端聚合')
+        }
+        scoped?.logger?.info?.('dsh-pocket-ios: 插件移动端聚合已挂载 /dsh-pocket/plugins/list')
+      })
+    } else if (ctx?.pluginManager) {
+      registerPluginAggregator(ctx)
+    } else {
+      ctx?.logger?.warn?.('dsh-pocket-ios: 没有 pluginManager，插件聚合未挂载')
+    }
+  } catch (error) {
+    ctx?.logger?.warn?.(`dsh-pocket-ios: 挂载插件聚合失败：${String(error?.message ?? error)}`)
+  }
+
   return attachStableProxy(ctx, route.handler)
 }

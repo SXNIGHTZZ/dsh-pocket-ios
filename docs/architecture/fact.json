@@ -1,18 +1,18 @@
 {
-  "generated_at": "2026-11-14T17:08:44+08:00",
-  "commit": "1e5369d",
+  "generated_at": "2026-11-16T15:01:35+08:00",
+  "commit": "2114734",
   "layers": [
     {
       "layer": "pure-logic",
       "role": "纯逻辑层：策略/解析/传输，禁止依赖 UI",
-      "files": 61,
-      "lines": 3921
+      "files": 63,
+      "lines": 4139
     },
     {
       "layer": "app",
       "role": "App 编排层与视图",
-      "files": 94,
-      "lines": 13076
+      "files": 97,
+      "lines": 14035
     },
     {
       "layer": "ui-tests",
@@ -94,7 +94,17 @@
     },
     {
       "from_layer": "app",
+      "to": "Vision",
+      "kind": "external"
+    },
+    {
+      "from_layer": "app",
       "to": "VisionKit",
+      "kind": "external"
+    },
+    {
+      "from_layer": "app",
+      "to": "WebKit",
       "kind": "external"
     },
     {
@@ -254,6 +264,30 @@
       "lines": 66,
       "types": [
         "PendingQuestionPayload"
+      ],
+      "imports": [
+        "Foundation"
+      ]
+    },
+    {
+      "file": "DSHKit/Sources/DSHKit/Protocol/PluginMobileChannelPolicy.swift",
+      "layer": "pure-logic",
+      "lines": 43,
+      "types": [
+        "PluginMobileChannelPolicy"
+      ],
+      "imports": [
+        "Foundation"
+      ]
+    },
+    {
+      "file": "DSHKit/Sources/DSHKit/Protocol/PluginMobileManifest.swift",
+      "layer": "pure-logic",
+      "lines": 175,
+      "types": [
+        "PluginMobileManifest",
+        "PluginMobileEntry",
+        "PluginMobileCatalog"
       ],
       "imports": [
         "Foundation"
@@ -892,7 +926,7 @@
     {
       "file": "DSHPocket/Model/ConnectFailureMessage.swift",
       "layer": "app",
-      "lines": 267,
+      "lines": 270,
       "types": [
         "ConnectFailureMessage"
       ],
@@ -1412,7 +1446,7 @@
     {
       "file": "DSHPocket/Session/ConnectionModel+Connect.swift",
       "layer": "app",
-      "lines": 331,
+      "lines": 377,
       "types": [],
       "imports": [
         "AVFoundation",
@@ -1478,7 +1512,7 @@
     {
       "file": "DSHPocket/Session/ConnectionModel+Endpoints.swift",
       "layer": "app",
-      "lines": 241,
+      "lines": 256,
       "types": [],
       "imports": [
         "AVFoundation",
@@ -1655,7 +1689,7 @@
     {
       "file": "DSHPocket/Session/ConnectionModel.swift",
       "layer": "app",
-      "lines": 552,
+      "lines": 560,
       "types": [
         "ConnectionModel"
       ],
@@ -1832,6 +1866,18 @@
       ]
     },
     {
+      "file": "DSHPocket/Session/PluginMobileAPI.swift",
+      "layer": "app",
+      "lines": 134,
+      "types": [
+        "PluginMobileAPI"
+      ],
+      "imports": [
+        "DSHKit",
+        "Foundation"
+      ]
+    },
+    {
       "file": "DSHPocket/Session/QuestionInbox.swift",
       "layer": "app",
       "lines": 157,
@@ -1893,7 +1939,7 @@
     {
       "file": "DSHPocket/Support/AppSupport.swift",
       "layer": "app",
-      "lines": 282,
+      "lines": 309,
       "types": [
         "AccessibilityAnnouncer",
         "ConversationViewLifetime",
@@ -1931,9 +1977,23 @@
       ]
     },
     {
+      "file": "DSHPocket/Support/LayoutDebug.swift",
+      "layer": "app",
+      "lines": 198,
+      "types": [
+        "LayoutDebugStore",
+        "LayoutDebug",
+        "LayoutDebugModifier"
+      ],
+      "imports": [
+        "Observation",
+        "SwiftUI"
+      ]
+    },
+    {
       "file": "DSHPocket/Support/Localization.swift",
       "layer": "app",
-      "lines": 329,
+      "lines": 379,
       "types": [
         "AppLanguage",
         "LanguageStore",
@@ -1970,7 +2030,7 @@
     {
       "file": "DSHPocket/Views/AppSettingsSheet.swift",
       "layer": "app",
-      "lines": 144,
+      "lines": 183,
       "types": [
         "AppSettingsSheet"
       ],
@@ -2089,7 +2149,7 @@
     {
       "file": "DSHPocket/Views/ConnectScanCard.swift",
       "layer": "app",
-      "lines": 103,
+      "lines": 113,
       "types": [
         "ConnectScanCard"
       ],
@@ -2100,7 +2160,7 @@
     {
       "file": "DSHPocket/Views/ConnectView.swift",
       "layer": "app",
-      "lines": 399,
+      "lines": 404,
       "types": [
         "ConnectView"
       ],
@@ -2124,7 +2184,7 @@
     {
       "file": "DSHPocket/Views/ConnectedView.swift",
       "layer": "app",
-      "lines": 482,
+      "lines": 497,
       "types": [
         "ConnectedView"
       ],
@@ -2159,7 +2219,7 @@
     {
       "file": "DSHPocket/Views/ConversationStatusViews.swift",
       "layer": "app",
-      "lines": 122,
+      "lines": 123,
       "types": [
         "ConversationStatusBanner",
         "ConversationActivityBar"
@@ -2171,7 +2231,7 @@
     {
       "file": "DSHPocket/Views/ConversationView.swift",
       "layer": "app",
-      "lines": 577,
+      "lines": 596,
       "types": [
         "ConversationView"
       ],
@@ -2258,9 +2318,10 @@
     {
       "file": "DSHPocket/Views/JobsToolbarButton.swift",
       "layer": "app",
-      "lines": 75,
+      "lines": 90,
       "types": [
         "JobsToolbarButton",
+        "PluginToolbarButton",
         "PocketChrome"
       ],
       "imports": [
@@ -2319,7 +2380,7 @@
     {
       "file": "DSHPocket/Views/MessageRow.swift",
       "layer": "app",
-      "lines": 263,
+      "lines": 279,
       "types": [
         "MessageRow"
       ],
@@ -2362,6 +2423,21 @@
         "UserNotifications",
         "VisionKit",
         "os"
+      ]
+    },
+    {
+      "file": "DSHPocket/Views/PluginPanelSheet.swift",
+      "layer": "app",
+      "lines": 232,
+      "types": [
+        "PluginPanelSheet",
+        "PluginWebViewBox",
+        "PluginWebView"
+      ],
+      "imports": [
+        "DSHKit",
+        "SwiftUI",
+        "WebKit"
       ]
     },
     {
@@ -2415,7 +2491,7 @@
     {
       "file": "DSHPocket/Views/ProcessRow.swift",
       "layer": "app",
-      "lines": 143,
+      "lines": 149,
       "types": [
         "ProcessRow"
       ],
@@ -2439,7 +2515,7 @@
     {
       "file": "DSHPocket/Views/QRScannerView.swift",
       "layer": "app",
-      "lines": 30,
+      "lines": 149,
       "types": [
         "QRScannerView"
       ],
@@ -2456,6 +2532,7 @@
         "Textual",
         "UIKit",
         "UserNotifications",
+        "Vision",
         "VisionKit",
         "os"
       ]
@@ -2546,7 +2623,7 @@
     {
       "file": "DSHPocket/Views/TurnFailureRow.swift",
       "layer": "app",
-      "lines": 51,
+      "lines": 52,
       "types": [
         "TurnFailureRow"
       ],

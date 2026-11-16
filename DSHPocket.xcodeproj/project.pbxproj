@@ -108,7 +108,9 @@
 		D1CFA11E0000000000000008 /* ImagePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CFA11E0000000000000007 /* ImagePipeline.swift */; };
 		D1CFA11E000000000000000A /* DraftImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CFA11E0000000000000009 /* DraftImageStore.swift */; };
 		D1CFA11E0000000000000004 /* PocketMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CFA11E0000000000000003 /* PocketMotion.swift */; };
-		/* End PBXBuildFile section */
+				D1CFA11EE69E3ACF4A62B654 /* PluginMobileAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CFA11E58345AAF7B186A5F /* PluginMobileAPI.swift */; };
+		D1CFA11ED978B58FCC3D5FCD /* PluginPanelSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CFA11EB49B7B536A0EE5C9 /* PluginPanelSheet.swift */; };
+/* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A10000000000000000000002 /* DSHPocketApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSHPocketApp.swift; sourceTree = "<group>"; };
@@ -213,6 +215,8 @@
 		D1CFA11E0000000000000007 /* ImagePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePipeline.swift; sourceTree = "<group>"; };
 		D1CFA11E0000000000000009 /* DraftImageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftImageStore.swift; sourceTree = "<group>"; };
 		D1CFA11E0000000000000003 /* PocketMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketMotion.swift; sourceTree = "<group>"; };
+		D1CFA11E58345AAF7B186A5F /* PluginMobileAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginMobileAPI.swift; sourceTree = "<group>"; };
+		D1CFA11EB49B7B536A0EE5C9 /* PluginPanelSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginPanelSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -291,6 +295,7 @@
 		69BDB715740452976917A319 /* Session */ = {
 			isa = PBXGroup;
 			children = (
+				D1CFA11E58345AAF7B186A5F /* PluginMobileAPI.swift */,
 				943528201F1F90E206912130 /* ConnectionModel+Connect.swift */,
 				D1CFA11E0000000000000033 /* ConnectionModel+Send.swift */,
 				D1CFA11E0000000000000035 /* ConnectionModel+Diagnostics.swift */,
@@ -361,6 +366,7 @@
 		38DF21AEF4612506D6BE5CBE /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				D1CFA11EB49B7B536A0EE5C9 /* PluginPanelSheet.swift */,
 				6B5ACA9EC358DB8FEBD95C72 /* AppSettingsSheet.swift */,
 				91B78B4F581F4025F6DCD0CE /* AttachmentThumbnail.swift */,
 				663AD79AC0134C7169F385DB /* CameraPicker.swift */,
@@ -562,6 +568,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D1CFA11ED978B58FCC3D5FCD /* PluginPanelSheet.swift in Sources */,
+				D1CFA11EE69E3ACF4A62B654 /* PluginMobileAPI.swift in Sources */,
 				52984328C331F10CC61F708D /* DSHPocketApp.swift in Sources */,
 				3C22BCF78D87D36182DEB380 /* AppSupport.swift in Sources */,
 				E1BFD38C37A933750C39EC92 /* Localization.swift in Sources */,
