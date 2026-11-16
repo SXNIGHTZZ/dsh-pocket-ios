@@ -25,8 +25,10 @@
 | L2b | `kind: "native"` + 内容 DSL | 原生渲染内容 | 学一套 JSON |
 
 **L2 拆成 a/b 是关键**：L2a 复用 DSH 已有的 `settings` schema（`remote.settings.describe` /
-`mutate`，官方文档明说「供按 schema 生成页面的客户端使用；目前没有已发布的客户端这样做」），
-作者零投入、中等工作量；L2b 才需要自建 UI DSL，是重工程。
+`mutate`），作者零投入、中等工作量；L2b 才需要自建 UI DSL，是重工程。
+
+**但 L2a 别当第一优先**：连 794 stars 的同类项目 Whaleness 都没做配置表单编辑
+（它的 `componentField` 是只读展示），说明需求或成本与直觉不符。**先验证再用工。**
 
 **L0 目前不回退展示桌面端 UI，但这不等于做不到**：桌面插件面板虽无独立 URL，
 但 DSH Web 的类名是语义化的、布局靠 CSS 变量、右侧栏状态存在稳定的 localStorage key，
