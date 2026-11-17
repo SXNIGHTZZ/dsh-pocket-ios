@@ -16,4 +16,6 @@ store/screenshot-candidates/
 _promo-shots/
 
 # 本地参考记录：同类项目调研，不对外发布（不进 GitHub，也不进 npm 包）
-docs/参考项目/
+# 文档与素材：只在本地保留，不随仓库发布
+# （截图/宣传图/ADR/架构快照/检查点记录都属于过程材料）
+docs/
