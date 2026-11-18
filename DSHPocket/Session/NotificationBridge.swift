@@ -84,6 +84,8 @@ extension ConnectionModel {
         ).rawValue
         let requestId = UUID().uuidString.lowercased()
         do {
+            // 通知回复只发纯文本，字段仍写全，方便和另外两条日志用同一套解析。
+            DiagFileLog.log("send from=iOS(notification) chars=\(text.count) images=0 hasImage=false session=\(shortSessionId(sessionId))")
             _ = try await rpcClient.rpcWithRetryAdapted("session/prompt", args: ["request": [
                 "requestId": requestId,
                 "sessionId": sessionId,

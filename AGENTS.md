@@ -149,6 +149,50 @@ curl -sS "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/$C/pack
 curl -sS "https://api.github.com/repos/deepseek-ai/deepseek-harness/contents/packages/boot?ref=$C"
 ```
 
+## 3.8 消息来源：这条是手机发的还是电脑发的
+
+iOS App 发出的消息，正文末尾带 **U+2063 ×2**（INVISIBLE SEPARATOR，零宽不可见）；
+Mac 桌面端（DSH Web）发出的消息**不带**。这是唯一可靠的来源判据——
+DSH 的 `user/message.source` 只有 `kind` / `rpcId` / `clientTimeZone`，**没有客户端标识**。
+
+**读原始内容判断，不要靠渲染后的视觉**（零宽字符看不见）：
+
+```bash
+# 查最近一条用户消息是不是带 iOS 标记
+L=$(ls -t ~/.dsh/sessions/*dsh-pocket-ios*/session-*/session.v4.jsonl.zstd | head -1)
+zstd -dc "$L" | python3 -c "
+import sys, json
+last = None
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    try: o = json.loads(line)
+    except: continue
+    # ⚠️ 必须同时限定 source.kind == 'user'：
+    # type 是 user/message 的还有 time-context、agent-instructions 等系统注入，
+    # 只按 type 取最后一条会拿到注入内容，判出来永远是 Mac（已踩）。
+    if o.get('type') == 'user/message' and o.get('data', {}).get('source', {}).get('kind') == 'user':
+        last = o
+for b in last['data']['content']:
+    if b.get('type') == 'text':
+        t = b['text']
+        print('iOS' if t.endswith('\u2063\u2063') else 'Mac', '|', repr(t[-8:]))
+"
+```
+
+**什么时候必须先查这个**：
+
+- 用户报「App 进不去 / 闪退 / 点了没反应」
+- 出现「我这边正常、你那边不对」的分歧
+- 改过发送路径、鉴权、启动流程之后
+
+**为什么**：这台机器的 iOS 端是 AI 直接装机调试的，**崩的概率明显高于桌面端**。
+分不清来源时，会在错误的一侧白查很久（2026-11-18 就发生过：
+把 App 跑挂了却在查服务端，来回四轮）。
+
+**注意**：这个标记**只用于归因，不许当功能用**。不要基于它改变回复内容或行为——
+用户可能同时在两端发消息。
+
 ## 4. 硬性禁止
 
 - 不要把公网地址、token、凭证写进代码或日志（历史已因此重写过一次）。

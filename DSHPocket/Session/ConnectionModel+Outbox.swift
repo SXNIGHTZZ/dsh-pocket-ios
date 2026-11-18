@@ -286,6 +286,9 @@ extension ConnectionModel {
             ])
         }
         do {
+            // content 在这里已经是拼好的块数组，没有原始 text，记块数和图片数而不是硬编码 0（否则日志会骗人）。
+            let imageCount = content.filter { ($0["type"] as? String) == "image" }.count
+            DiagFileLog.log("send from=iOS(backlog) blocks=\(content.count) images=\(imageCount) hasImage=\(imageCount > 0) session=\(shortSessionId(entry.sessionId))")
             _ = try await rpcClient.rpcWithRetryAdapted("session/prompt", args: ["request": [
                 "requestId": entry.id,
                 "sessionId": entry.sessionId,

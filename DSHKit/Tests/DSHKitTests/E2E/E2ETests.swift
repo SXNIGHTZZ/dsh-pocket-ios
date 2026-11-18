@@ -7,32 +7,7 @@ final class E2ETests: XCTestCase {
         try XCTUnwrap(DSHURL.normalizedBase("http://192.168.1.10:3081"))
     }
 
-    // E01 + E03：登录成功并通过可见性过滤
-    func testLoginThenVisibleSessions() async throws {
-        let listJSON = try fixtureJSON("session_list")
-        let payload = try JSONSerialization.data(withJSONObject: ["result": ["value": ["items": listJSON["items"]!]]])
-        let transport = MockHTTPTransport { request in
-            if request.url?.path == "/pocket-login" {
-                return .init(status: 302, body: Data(), headers: ["Set-Cookie": "dsh_pocket_token=x; Path=/"])
-            }
-            return .init(status: 200, body: payload, headers: [:])
-        }
-        let client = DSHClient(baseURL: try baseURL(), http: transport)
 
-        let outcome = try await client.login(pin: "12345678")
-        XCTAssertEqual(outcome, .success)
-        let sessions = try await client.sessions()
-        let visible = DSHSession.visible(in: sessions, archivedSessionIds: ["session-archived-1"])
-        XCTAssertEqual(visible.map(\.sessionId), ["session-normal-1"])
-    }
-
-    // E02：错误 PIN
-    func testWrongPIN() async throws {
-        let transport = MockHTTPTransport { _ in .init(status: 200, body: Data(), headers: [:]) }
-        let client = DSHClient(baseURL: try baseURL(), http: transport)
-        let outcome = try await client.login(pin: "bad")
-        XCTAssertEqual(outcome, .invalidPIN)
-    }
 
     // E04：同步快照 + 事件顺序 + watchdog 重连（Mock 连接）
     func testSyncFlowWithReconnect() async throws {

@@ -13,8 +13,10 @@ enum DiagFileLog {
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return dir.appendingPathComponent("diag.log")
     }
-    /// 单文件上限，超过后截断重写（只在启动时清，避免频繁 IO）。
+    /// 单文件上限。超过后**只丢最旧的部分**，保留最后 256 KB。
     private static let maxBytes = 512 * 1024
+    /// 截断后保留的尾部大小。取一半：既能压到上限内，又不至于刚清完立刻再满。
+    private static let keepBytes = maxBytes / 2
 
     static func reset() {
         queue.async {
@@ -29,7 +31,9 @@ enum DiagFileLog {
             let manager = FileManager.default
             if let size = try? manager.attributesOfItem(atPath: url.path)[.size] as? Int,
                size > maxBytes {
-                try? manager.removeItem(at: url)
+                // 曾经是直接删文件——那会把**最近的**记录一起丢掉，而排查时最需要最新的。
+                // 现在保留尾部 keepBytes：丢最旧的，留最新的。
+                Self.trimToTail()
             }
             if let handle = try? FileHandle(forWritingTo: url) {
                 handle.seekToEndOfFile()
@@ -39,6 +43,18 @@ enum DiagFileLog {
                 try? data.write(to: url, options: .atomic)
             }
         }
+    }
+
+    /// 只保留文件最后 keepBytes，并且**从整行开始**（不能留半行，否则时间戳会缺一半）。
+    private static func trimToTail() {
+        guard let data = try? Data(contentsOf: url), data.count > keepBytes else { return }
+        let from = data.count - keepBytes
+        let newline: UInt8 = 0x0A
+        var start = from
+        while start < data.count, data[start] != newline { start += 1 }
+        if start < data.count { start += 1 }     // 跳过那个换行，从下一行开头写
+        guard start < data.count else { return }
+        try? data.subdata(in: start..<data.count).write(to: url, options: .atomic)
     }
 
     private static func stamp() -> String {

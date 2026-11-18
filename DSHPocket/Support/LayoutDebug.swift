@@ -25,7 +25,11 @@ final class LayoutDebugStore {
     }
 
     private init() {
-        enabled = UserDefaults.standard.bool(forKey: Self.key)
+        // 商店图/截图模式强制关闭：红框和编号会进截图，那是调试用的，不该出现在宣传图里。
+        // 直接赋值不触发 didSet，所以**持久化的开关值不会被改掉**——
+        // 用户自己在设置里开的调试模式，退出截图模式后仍然是开着的。
+        // 必须在这里判断而不是 LayoutDebug.enabled：视图层读的是 store（见 LayoutDebugModifier）。
+        enabled = DebugLaunch.storeShots ? false : UserDefaults.standard.bool(forKey: Self.key)
     }
 }
 

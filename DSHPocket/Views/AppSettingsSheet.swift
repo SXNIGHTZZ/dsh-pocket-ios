@@ -23,6 +23,7 @@ struct AppSettingsSheet: View {
     /// 放在设置里而不是会话页，是因为连不上时根本没有会话可进——
     /// 而「连不上」恰恰是最需要诊断的时候（2026-11-15 用户反馈）。
     @State private var diagnosticsCopied = false
+    @State private var showingDisconnectConfirm = false
     @Environment(\.dismiss) private var dismiss
     @State private var languageRevision = 0
     /// 排序面板的上下文。用 item 而不是「bool + 数据」两个状态：
@@ -90,6 +91,28 @@ struct AppSettingsSheet: View {
                         Text(L10n.t("完成提醒"))
                     }
                 }
+                Section {
+                    Picker(selection: Binding(
+                        get: { model.busyEnterPreference },
+                        set: { mode in
+                            Task { await model.setBusyEnterPreference(mode) }
+                        }
+                    )) {
+                        Text(L10n.t("插话发送")).tag(PromptMode.steer)
+                        Text(L10n.t("排队发送")).tag(PromptMode.queue)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L10n.t("繁忙时的发送行为"))
+                            Text(L10n.t("智能体运行时按下发送键的投递方式"))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text(L10n.t("发送"))
+                } footer: {
+                    Text(L10n.t("与电脑端共用同一份设置。空闲时总是新开一轮，此设置只在生成中生效。"))
+                }
+
                 Section(L10n.t("调试")) {
                     Button {
                         UIPasteboard.general.string = model.diagnosticReport()
@@ -102,6 +125,11 @@ struct AppSettingsSheet: View {
                         Label(diagnosticsCopied ? L10n.t("已复制诊断信息") : L10n.t("复制诊断信息"),
                               systemImage: diagnosticsCopied ? "checkmark.circle.fill" : "stethoscope")
                     }
+                    Button {
+                        Task { await model.diagnoseBusyEnterWrite() }
+                    } label: {
+                        Label(L10n.t("诊断发送方式写入"), systemImage: "stethoscope")
+                    }
                     Toggle(isOn: Binding(
                         get: { LayoutDebug.enabled },
                         set: { LayoutDebug.enabled = $0 }
@@ -112,17 +140,17 @@ struct AppSettingsSheet: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    ForEach(LayoutDebug.entries) { entry in
-                        HStack(spacing: 8) {
-                            Text(entry.id)
-                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(.red)
-                                .frame(width: 22, alignment: .leading)
-                            Text(L10n.t(entry.name)).font(.footnote)
-                            Spacer(minLength: 0)
-                            Text(entry.spacing).font(.caption2).foregroundStyle(.secondary)
-                        }
+                }
+
+                // 连接操作从会话列表左上角移到这里：那里只留高频动作（新建会话）。
+                Section {
+                    Button(role: .destructive) {
+                        showingDisconnectConfirm = true
+                    } label: {
+                        Label(L10n.t("断开连接"), systemImage: "rectangle.portrait.and.arrow.right")
                     }
+                } footer: {
+                    Text(L10n.t("断开后需要重新扫码或输入访问密码。"))
                 }
 
                 Section("DSH Pocket") {
@@ -132,6 +160,13 @@ struct AppSettingsSheet: View {
                         Text(versionText).foregroundStyle(.secondary)
                     }
                 }
+            }
+            .alert(L10n.t("断开与电脑的连接？"), isPresented: $showingDisconnectConfirm) {
+                Button(L10n.t("断开连接"), role: .destructive) {
+                    model.disconnect()
+                    dismiss()
+                }
+                Button(L10n.t("取消"), role: .cancel) {}
             }
             .navigationTitle(L10n.t("设置"))
             .navigationBarTitleDisplayMode(.inline)

@@ -547,6 +547,14 @@ final class ConnectionModel {
     var selectedModelLabel: String?
     /// 当前推理强度的人话名（模型没公布强度时为 nil）。只用于展示。
     var selectedReasoningLabel: String?
+    /// 智能体运行时按发送键的投递方式（全局偏好，来自 DSH 的 `ui-conversation.busyEnter`）。
+    ///
+    /// **默认 `.steer` 是刻意保留的**：手机上排队会让消息「看起来卡住」，
+    /// 这个体感损失远大于误打断（见 `PromptPolicy.defaultLiveMode` 的注释）。
+    /// 用户在电脑端设成排队后，`loadBusyEnterPreference()` 会把它同步过来。
+    var busyEnterPreference: PromptMode = PromptPolicy.defaultLiveMode
+    /// 是否已经成功读过偏好。避免每次进会话都多发一次 RPC。
+    var busyEnterLoaded = false
 
     /// 会话地址（用于复制给其他 Agent / 自己记录）。
     var sessionAddress: String {

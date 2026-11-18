@@ -224,10 +224,11 @@ extension ConnectionModel {
         let loginSession = URLSession(configuration: .default, delegate: recorder, delegateQueue: nil)
         defer { loginSession.finishTasksAndInvalidate() }
         do {
-            // 登录优先走本插件自带的端点（不依赖 dsh-pocket）：
+            // 登录只走本插件自带的端点，**不依赖任何第三方插件**：
             //   POST /dsh-pocket-ios/login  form: token=<PIN>
             //   校验通过 → 302 到 DSH 的 browser-auth token URL，种 dsh-auth cookie。
-            // 若插件不存在（404/405），回退到 dsh-pocket 的 /pocket-login。
+            // 以前这里还有「插件 404 时回退 dsh-pocket 的 /pocket-login」的分支，已删除：
+            // dsh-pocket-ios 是连接的必要条件，没装就该明确报错，而不是悄悄换协议。
             func postForm(_ path: String) async throws -> (HTTPURLResponse, Bool) {
             var request = URLRequest(url: url.appending(path: path))
             request.httpMethod = "POST"
@@ -247,17 +248,10 @@ extension ConnectionModel {
             recordDiagnostic("插件登录：HTTP \(pluginHTTP.statusCode)，重定向=\(pluginRedirected ? "是" : "否")，dsh-auth cookie=\(hasDSHAuth ? "有" : "无")")
             if (200..<400).contains(pluginHTTP.statusCode), hasDSHAuth || pluginRedirected {
             loginOK = true
-            } else if pluginHTTP.statusCode == 404 || pluginHTTP.statusCode == 405 || pluginHTTP.statusCode == 503 || (500..<600).contains(pluginHTTP.statusCode) {
-            // 没有安装本插件：回退 dsh-pocket 的登录协议。
-            let (pocketHTTP, pocketRedirected) = try await postForm("pocket-login")
-            recordDiagnostic("dsh-pocket 登录回退：HTTP \(pocketHTTP.statusCode)")
-            if pocketHTTP.statusCode == 429 {
-            let retryAfter = Int(pocketHTTP.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 60
-            throw ConnectionError.rateLimited(retryAfter)
-            }
-            if pocketHTTP.statusCode == 401 || pocketHTTP.statusCode == 403 { throw ConnectionError.invalidPin }
-            let hasPocketCookie = HTTPCookieStorage.shared.cookies(for: url)?.contains { $0.name == "dsh_pocket_token" } ?? false
-            loginOK = (200..<400).contains(pocketHTTP.statusCode) && (pocketRedirected || hasPocketCookie)
+            } else if pluginHTTP.statusCode == 404 || pluginHTTP.statusCode == 405 {
+            // 端点不存在 = 电脑上没装（或版本过旧）dsh-pocket-ios。这不该被报成「密码错」。
+            recordDiagnostic("登录端点不存在（HTTP \(pluginHTTP.statusCode)）：dsh-pocket-ios 可能未安装或版本过旧")
+            throw ConnectionError.remote("电脑上没有安装手机连接插件（dsh-pocket-ios），或版本过旧")
             } else if pluginHTTP.statusCode == 401 {
             throw ConnectionError.invalidPin
             }

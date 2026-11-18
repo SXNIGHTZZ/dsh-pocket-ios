@@ -54,9 +54,11 @@ struct RootView: View {
             }
             .onChange(of: reduceMotion) { _, value in PocketMotion.reduceMotion = value }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                // 设置从右上角移到左上角；图标用三条横线（用户指定的样式）。
+                // 语义仍是「设置」，所以无障碍标签照旧，不读成「菜单」。
+                ToolbarItem(placement: .topBarLeading) {
                     Button { showingAppSettings = true } label: {
-                        Image(systemName: "gearshape")
+                        HamburgerGlyph()
                     }
                     .accessibilityLabel(L10n.t("设置"))
                 }
@@ -106,5 +108,30 @@ struct RootView: View {
             model.connection.hasFinishedRestore = true
             model.recordDiagnostic("启动恢复超时 2 秒，先显示界面")
         }
+    }
+}
+
+/// 三条横线的设置图标。
+///
+/// 为什么不用 `Image(systemName: "line.3.horizontal")`：系统符号的线段偏长、
+/// 线间距偏小，放进导航栏显得横向拉宽。这里自绘成**正方形**（整体 16×16），
+/// 线段用 `Capsule` 取圆头，间距是线高的 2.5 倍——和设计稿的疏密一致。
+private struct HamburgerGlyph: View {
+    /// 每条线的粗细。
+    private let lineHeight: CGFloat = 2
+    /// 线与线之间的空隙。
+    private let spacing: CGFloat = 5
+    /// 整体边长（高度 === 宽度，所以 3 × lineHeight + 2 × spacing 要等于它）。
+    private let side: CGFloat = 16
+
+    var body: some View {
+        VStack(spacing: spacing) {
+            ForEach(0..<3, id: \.self) { _ in
+                Capsule()
+                    .frame(width: side, height: lineHeight)
+            }
+        }
+        .frame(width: side, height: side)
+        .accessibilityHidden(true)
     }
 }

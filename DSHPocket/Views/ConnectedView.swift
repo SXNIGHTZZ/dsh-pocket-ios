@@ -19,7 +19,6 @@ import UserNotifications
 struct ConnectedView: View {
     @Bindable var model: ConnectionModel
     @AppStorage("dsh-pocket.session-list-mode") private var sessionListModeRaw = SessionListMode.grouped.rawValue
-    @State private var showingDisconnectConfirm = false
     @AppStorage("dsh-pocket.collapsed-groups") private var collapsedGroupsRaw = ""
     @State private var renamingSession: PocketSession?
     @State private var didAutoOpen = false
@@ -344,17 +343,21 @@ struct ConnectedView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                if model.isDemoMode {
+                // 截图模式不显示「退出演示」——那是调试入口，不该进宣传图。
+                if model.isDemoMode, !DebugLaunch.storeShots {
                     Button { model.exitDemoMode() } label: {
                         Image(systemName: "xmark")
                     }
                     .accessibilityLabel(L10n.t("退出演示模式"))
-                } else {
-                    Button { showingDisconnectConfirm = true } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                    }
-                    .accessibilityLabel(L10n.t("断开连接"))
                 }
+            }
+            // 显式指定 SF Pro（无衬线）而不是靠继承：换语言/换系统字号后
+            // 导航标题的默认样式会变，品牌标题要保持一致。
+            ToolbarItem(placement: .principal) {
+                Text("DSH Pocket")
+                    .font(.system(size: 17, weight: .semibold, design: .default))
+                    .tracking(0.2)
+                    .accessibilityAddTraits(.isHeader)
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 // 完成提醒开关已移到「设置」里，这里不再放第二个入口。
@@ -398,7 +401,9 @@ struct ConnectedView: View {
                 onClose: { showsWorkspaceReorder = false }
             )
         }
-        .navigationTitle(L10n.t("会话"))
+        // 品牌名，不翻译：进本地化表反而会让各语言显示不同名字。
+        .navigationTitle("DSH Pocket")
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $renamingSession) { session in
             RenameSessionSheet(
                 originalTitle: session.displayTitle,
@@ -408,12 +413,6 @@ struct ConnectedView: View {
                 },
                 onCancel: { renamingSession = nil }
             )
-        }
-        .alert(L10n.t("断开与电脑的连接？"), isPresented: $showingDisconnectConfirm) {
-            Button(L10n.t("断开连接"), role: .destructive) { model.disconnect() }
-            Button(L10n.t("取消"), role: .cancel) {}
-        } message: {
-            Text(L10n.t("断开后需要重新扫码配对（或输入访问密码）才能再次连接。"))
         }
 
         .navigationDestination(for: PocketSession.self) { session in

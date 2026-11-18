@@ -2,6 +2,14 @@
 
 let pocketLogger = Logger(subsystem: "com.ruska.dsh-pocket-ios", category: "conversation")
 
+/// 会话 id 的短形式：`session-76527050-...` → `76527050`。
+///
+/// 直接 `suffix(8)` 会拿到 `session-`（前 8 位是固定前缀），日志里等于没记。
+func shortSessionId(_ id: String) -> String {
+    let stripped = id.hasPrefix("session-") ? String(id.dropFirst("session-".count)) : id
+    return String(stripped.prefix(8))
+}
+
 func timingLog(_ message: String) {
     let line = "\(ISO8601DateFormatter().string(from: Date())) DSH_TIMING \(message)"
     NSLog("%@", line)

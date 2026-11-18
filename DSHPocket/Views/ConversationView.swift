@@ -526,6 +526,8 @@ struct ConversationView: View {
         }
         .task {
             if model.modelGroups.isEmpty { await model.loadModelCatalog() }
+            // 发送方式偏好：设置页和「更多」菜单都读它，进会话时同步一次。
+            await model.loadBusyEnterPreference()
         }
         .onDisappear {
             composerFocused = false

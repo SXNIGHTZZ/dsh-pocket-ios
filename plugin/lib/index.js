@@ -1,8 +1,11 @@
 /**
  * dsh-pocket-ios 宿主入口。
- * 1) 检测本机 Tailscale（DNSName + tailscale serve 的 HTTPS 地址）；
- * 2) 读取 dsh-pocket 的访问密码，生成带 `?pin=` 的二维码（App 扫码即连）；
- * 3) 通过 webServer 暴露 `/dsh-pocket-ios/tailscale.status` 给设置页卡片。
+ *
+ * 与 dsh-pocket **无依赖**：连接、密码、配对全都自己实现。
+ * 1) 四种连接方式（lan / cloudflare / tailscale / easytier）各自探测本机地址；
+ * 2) 访问密码由本插件生成并保存在 ~/.dsh/dsh-pocket-ios/pin（不回退读第三方插件）；
+ * 3) 扫码建连走一次性 token：`?pair=<token>` → POST /dsh-pocket-ios/pair 换 dsh-auth cookie；
+ * 4) 通过 webServer 暴露 `/dsh-pocket-ios/*` 给设置页卡片与 App。
  */
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'

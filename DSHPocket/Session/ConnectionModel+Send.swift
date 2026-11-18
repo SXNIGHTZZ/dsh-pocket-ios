@@ -206,8 +206,15 @@ extension ConnectionModel {
             }
             // 只有「确认过实时 turn 事件、且确实在跑」才用 steer 打断；
             // 没见到实时事件时按 queue 处理——queue 最多排到本轮之后，steer 会打断正在做的事。
-            let promptMode = PromptPolicy.liveMode(isRunning: isTurnRunning).rawValue
+            // 在跑时用用户偏好（默认 steer），空闲时一律新开一轮。
+            let promptMode = PromptPolicy.liveMode(
+                isRunning: isTurnRunning,
+                preference: busyEnterPreference
+            ).rawValue
             recordDiagnostic("发送模式：\(promptMode)（生成中=\(isTurnRunning)）")
+            // 来源落盘：diag.log 是纯文本、带时间戳，排查时不用去解析消息里的零宽字符。
+            // 只记元数据，**不记正文**（隐私）。
+            DiagFileLog.log("send from=iOS mode=\(promptMode) chars=\(text.count) images=\(payloadImages.count) hasImage=\(!payloadImages.isEmpty) session=\(shortSessionId(session.sessionId))")
             _ = try await rpcClient.rpcWithRetryAdapted("session/prompt", args: ["request": [
                 "requestId": requestId,
                 "sessionId": session.sessionId,

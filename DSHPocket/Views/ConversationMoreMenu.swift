@@ -1,6 +1,7 @@
 // ConversationMoreMenu
 
 import SwiftUI
+import DSHKit
 
 /// 对话页右上角「更多」菜单：复制会话地址/日志路径/诊断信息、选择模型。
 ///
@@ -29,6 +30,18 @@ struct ConversationMoreMenu: View {
                 onShowJobs()
             } label: {
                 Label(L10n.t("后台任务"), systemImage: "checklist")
+            }
+            // 和设置页里的是**同一个全局偏好**，放这里只是省一次跳转。
+            Button {
+                let next: PromptMode = model.busyEnterPreference == .steer ? .queue : .steer
+                Task { await model.setBusyEnterPreference(next) }
+            } label: {
+                Label(
+                    model.busyEnterPreference == .steer
+                        ? L10n.t("发送方式：插话")
+                        : L10n.t("发送方式：排队"),
+                    systemImage: model.busyEnterPreference == .steer ? "arrow.down.to.line" : "list.bullet"
+                )
             }
             Divider()
             Button {

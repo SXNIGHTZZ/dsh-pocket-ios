@@ -19,24 +19,7 @@ final class ClientTests: XCTestCase {
         XCTAssertEqual(ws.connectedURL?.absoluteString, "ws://192.168.1.10:3081/api/remote.mux")
     }
 
-    func testLoginSuccessThroughClient() async throws {
-        let transport = MockHTTPTransport { _ in
-            .init(status: 302, body: Data(), headers: ["Set-Cookie": "dsh_pocket_token=abc; Path=/"])
-        }
-        let outcome = try await client(transport: transport).login(pin: "12345678")
-        XCTAssertEqual(outcome, .success)
-        let request = try XCTUnwrap(transport.requests.first)
-        XCTAssertEqual(request.httpMethod, "POST")
-        XCTAssertEqual(request.url?.path, "/pocket-login")
-        let body = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
-        XCTAssertTrue(body.contains("token=12345678"))
-    }
 
-    func testLoginWrongPINThroughClient() async throws {
-        let transport = MockHTTPTransport { _ in .init(status: 200, body: Data("<html>login</html>".utf8), headers: [:]) }
-        let outcome = try await client(transport: transport).login(pin: "bad")
-        XCTAssertEqual(outcome, .invalidPIN)
-    }
 
     func testRPCUnauthorizedThrows() async throws {
         let transport = MockHTTPTransport { _ in .init(status: 401, body: Data(), headers: [:]) }

@@ -47,6 +47,80 @@ extension ConnectionModel {
         }
     }
 
+    /// 诊断用：读一次 describe、写一次 mutate，把每一步的真实形状记到 diag.log。
+    /// 只由设置页的按钮触发——**不挂在启动路径上**（上次挂启动路径直接把 App 跑挂了）。
+    @MainActor
+    func diagnoseBusyEnterWrite() async {
+        DiagFileLog.log("=== busyEnter 诊断开始 ===")
+        do {
+            let v = try await rpcClient.rpcAdapted(BusyEnterSetting.describeMethod, args: [:])
+            let namespaces = v["namespaces"] as? [[String: Any]] ?? []
+            DiagFileLog.log("describe: writable=\(v["writable"] ?? "?") 共 \(namespaces.count) 个 ns")
+            for ns in namespaces where (ns["ns"] as? String)?.contains("conversation") == true {
+                DiagFileLog.log("  命中 ns=\(ns["ns"] ?? "?") value=\(ns["value"] ?? [:]) hasSchema=\(ns["schema"] != nil)")
+            }
+            let names = namespaces.compactMap { $0["ns"] as? String }
+            DiagFileLog.log("全部 ns: \(names.joined(separator: ", "))")
+        } catch {
+            DiagFileLog.log("describe 失败: \(error)")
+        }
+
+        do {
+            let r = try await rpcClient.rpcAdapted(BusyEnterSetting.mutateMethod, args: [
+                "ns": BusyEnterSetting.namespace,
+                "ops": [["op": "set", "path": ["busyEnter"], "value": "queue"]]
+            ])
+            DiagFileLog.log("mutate 成功，返回 keys=\(r.keys.sorted()) value=\(r["value"] ?? [:])")
+        } catch {
+            DiagFileLog.log("mutate 失败: \(error)")
+        }
+        DiagFileLog.log("=== busyEnter 诊断结束 ===")
+    }
+
+    /// 读取「繁忙时发送方式」偏好。读不到就保持默认，**不报错打断用户**——
+    /// 这是锦上添花的偏好，缺了不影响发送。
+    @MainActor
+    func loadBusyEnterPreference() async {
+        guard !isDemoMode, !busyEnterLoaded else { return }
+        do {
+            let value = try await rpcClient.rpcAdapted(BusyEnterSetting.describeMethod, args: [:])
+            let namespaces = value["namespaces"] as? [[String: Any]] ?? []
+            if let mode = BusyEnterSetting.read(fromDescriptors: namespaces) {
+                busyEnterPreference = mode
+            }
+            // 只有在请求成功时才置位：读失败允许下次进会话重试。
+            busyEnterLoaded = true
+        } catch {
+            recordDiagnostic("读取发送方式偏好失败：\(error.localizedDescription)")
+        }
+    }
+
+    /// 写入偏好。乐观更新 + 失败回滚——不能让开关停在「用户以为切了」的位置。
+    @MainActor
+    func setBusyEnterPreference(_ mode: PromptMode) async {
+        guard !isDemoMode else {
+            busyEnterPreference = mode
+            return
+        }
+        let previous = busyEnterPreference
+        busyEnterPreference = mode
+        do {
+            // 参数名必须是 `ns`：DSH 的签名是
+            // mutate(ns: string, ops: SettingsPathOp[], expectedRevision?: number)
+            // 写成 namespace 时 ns 为 undefined，服务端会报
+            // `No configurable plugin entry "undefined"`。
+            _ = try await rpcClient.rpcAdapted(BusyEnterSetting.mutateMethod, args: [
+                "ns": BusyEnterSetting.namespace,
+                "ops": BusyEnterSetting.writeOps(mode)
+            ])
+        } catch {
+            busyEnterPreference = previous
+            // 失败必须留痕：只弹窗的话，事后完全无法定位（这次就卡在这）。
+            DiagFileLog.log("busyEnter-write-FAILED ns=\(BusyEnterSetting.namespace) mode=\(mode.rawValue) error=\(error)")
+            reportActionError("切换发送方式失败：\(error.localizedDescription)")
+        }
+    }
+
     @MainActor
     func loadModelCatalog() async {
         guard !isDemoMode else { return }

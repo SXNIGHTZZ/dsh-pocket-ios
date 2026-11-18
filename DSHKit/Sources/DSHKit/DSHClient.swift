@@ -30,28 +30,6 @@ public final class DSHClient: @unchecked Sendable {
         return try await webSocket.connect(url: url)
     }
 
-    /// 登录：POST /pocket-login（表单 token=PIN），根据重定向/cookie 判定结果。
-    public func login(pin: String) async throws -> LoginOutcome {
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw DSHError.invalidAddress
-        }
-        components.path = "/pocket-login"
-        guard let url = components.url else { throw DSHError.invalidAddress }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = "token=\(pin.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? pin)".data(using: .utf8)
-
-        let (_, http) = try await http.data(for: request)
-        let redirected = http.statusCode == 302 || http.statusCode == 303
-        let cookies = http.value(forHTTPHeaderField: "Set-Cookie") ?? ""
-        let hasPocketCookie = cookies.contains("dsh_pocket_token")
-        return LoginClassifier.outcome(statusCode: http.statusCode,
-                                       redirected: redirected,
-                                       hasPocketCookie: hasPocketCookie)
-    }
-
     /// 发送一个 RPC 并返回 `result.value`。
     ///
     /// - Parameter timeout: 单次请求超时，默认 20 秒（沿用 App 层旧值，避免行为漂移）。

@@ -135,6 +135,9 @@ struct PluginPanelSheet: View {
         .task { await prepare() }
     }
 
+    /// 移动端接入指引（飞书文档）。作者改完插件后按里面的清单自查。
+    private static let mobilePluginGuideURL = URL(string: "https://my.feishu.cn/docx/U1qrdW22kopU7Ex50vvc9Q8snsf")!
+
     /// 换 token → 拉列表 → 拼出要加载的地址。
     ///
     /// 为什么一次只加载**第一个**声明了移动端的插件：协议 v1 明确「一个按钮 → 一个面板」，
@@ -151,20 +154,61 @@ struct PluginPanelSheet: View {
                 description: Text(L10n.t("在电脑端的 DSH 里安装插件后，这里就能看到。"))
             )
         } else {
+            // 分成两组而不是给每一行加「不支持手机」：23 行重复同一句会把可用插件淹没，
+            // 而分组标题只说一次，用户一眼就知道「哪些能点开、为什么其余的不能」。
+            let openable = catalog.plugins.filter(\.canOpen)
+            let desktopOnly = catalog.plugins.filter { !$0.canOpen }
+
             List {
+                // 放在最上方：插件作者打开这个面板时，第一眼就能看到「怎么让自己的插件也能被打开」。
                 Section {
-                    ForEach(catalog.plugins) { plugin in
-                        row(plugin)
-                    }
-                } header: {
-                    Text(L10n.tf("%d 个插件", catalog.plugins.count))
-                } footer: {
-                    if let toggleError {
-                        Text(toggleError).foregroundStyle(.red)
-                    } else {
-                        Text(L10n.t("有手机图标的可以在手机上打开；拨动开关会在电脑上重载插件。"))
+                    Link(destination: Self.mobilePluginGuideURL) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "book")
+                                .foregroundStyle(.tint)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(L10n.t("开发能在手机上打开的插件"))
+                                Text(L10n.t("接入指引：dsh.mobile 声明、路由、token、六个坑"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "arrow.up.forward.app")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                 }
+                if !openable.isEmpty {
+                    Section {
+                        ForEach(openable) { plugin in
+                            row(plugin)
+                        }
+                    } header: {
+                        Text(L10n.tf("可在手机上打开 %d 个", openable.count))
+                    } footer: {
+                        Text(L10n.t("拨动开关会在电脑上重载插件。"))
+                    }
+                }
+
+                if !desktopOnly.isEmpty {
+                    Section {
+                        ForEach(desktopOnly) { plugin in
+                            row(plugin)
+                        }
+                    } header: {
+                        Text(L10n.tf("仅桌面端 %d 个", desktopOnly.count))
+                    } footer: {
+                        Text(L10n.t("这些插件只有电脑端界面，手机上打不开。插件作者声明 dsh.mobile 之后才会出现在上面。"))
+                    }
+                }
+
+                if let toggleError {
+                    Section {
+                        Text(toggleError).foregroundStyle(.red)
+                    }
+                }
+
             }
             .listStyle(.insetGrouped)
         }
