@@ -366,6 +366,22 @@ struct ConversationView: View {
                         proxy.scrollTo(anchor, anchor: .top)
                     }
                 }
+                // 系统级「用户正在滚动」信号。DragGesture 有 6pt 门槛，
+                // 而"轻微上划"（3-5pt）触发不了它 —— 那正是「滑一下就被弹回」漏掉的一段。
+                .onScrollPhaseChange { _, newPhase in
+                    switch newPhase {
+                    case .interacting:
+                        // 手指一碰列表就说明意图是"看别处"，立即停止跟随。
+                        hasSwipedUp = true
+                        followsLatest = false
+                        scrollGeneration &+= 1
+                        userDragging = true
+                    case .idle:
+                        userDragging = false
+                    default:
+                        break
+                    }
+                }
                 .onScrollGeometryChange(for: CGFloat.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top
                 } action: { _, topOffset in
