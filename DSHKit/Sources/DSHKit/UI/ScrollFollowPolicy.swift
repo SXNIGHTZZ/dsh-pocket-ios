@@ -39,13 +39,17 @@ public enum ScrollFollowPolicy {
     /// 手感上就是「滑一点就被弹回去」。
     public static func action(distanceFromBottom: CGFloat,
                               drag: ScrollDragIntent,
-                              followsLatest: Bool) -> ScrollFollowAction {
+                              followsLatest: Bool,
+                              hasSwipedUp: Bool = false) -> ScrollFollowAction {
         if drag == .up { return .stopFollow }
-        // 距离为负 = 内容被拽出了边界（橡皮筋越界）。贴底时轻微上划就是这个状态：
-        // 用户意图明明是"离开底部看历史"，但负数仍然满足 isAtBottom，于是被判成"还在底部"
-        // 并立刻恢复跟随 —— 手感上就是"滑一下就被弹回去"。
-        // 越界一律视为不在底部；真正滚回底部时这个值会回到 0，那时才恢复跟随。
+        // 距离为负 = 内容被拽出了边界（橡皮筋越界），不算在底部。
         if distanceFromBottom < 0 { return .stopFollow }
+        // 上划过就别再自动跟随，直到用户自己下划或点「回到底部」。
+        //
+        // 为什么不能只看距离：手指松开后 ScrollView 会自动回弹到 distance == 0，
+        // 那一瞬间看起来"又贴底了"，跟随就被重新打开 —— 这就是"滑一下被弹回去"。
+        // 物理位置会回弹，"你往上划了"这个意图不会，所以要把它记下来。
+        if hasSwipedUp { return .stopFollow }
         if isAtBottom(distanceFromBottom: distanceFromBottom) { return .follow }
         if drag != .none { return .stopFollow }
         return followsLatest ? .pinToBottom : .keep

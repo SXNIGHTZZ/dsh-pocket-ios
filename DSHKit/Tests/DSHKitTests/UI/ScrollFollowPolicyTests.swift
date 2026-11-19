@@ -48,6 +48,28 @@ final class ScrollFollowPolicyTests: XCTestCase {
         )
     }
 
+    /// 上划过的意图不会因为"回弹到 0"而消失：距离正好 0 也不恢复跟随。
+    func testSwipedUpBlocksRefollowEvenAtExactBottom() {
+        XCTAssertEqual(
+            ScrollFollowPolicy.action(distanceFromBottom: 0, drag: .none,
+                                      followsLatest: false, hasSwipedUp: true),
+            .stopFollow
+        )
+        XCTAssertEqual(
+            ScrollFollowPolicy.action(distanceFromBottom: 2, drag: .none,
+                                      followsLatest: true, hasSwipedUp: true),
+            .stopFollow
+        )
+    }
+
+    /// 没上划过时行为不变（默认参数保证旧调用点不受影响）。
+    func testDefaultHasSwipedUpIsFalse() {
+        XCTAssertEqual(
+            ScrollFollowPolicy.action(distanceFromBottom: 0, drag: .none, followsLatest: false),
+            .follow
+        )
+    }
+
     /// 回归：真正贴底（距离正好 0）时，不拖动的状态下仍应恢复跟随。
     func testExactBottomStillRefollows() {
         XCTAssertEqual(

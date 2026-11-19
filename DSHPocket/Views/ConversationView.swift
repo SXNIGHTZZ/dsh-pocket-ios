@@ -44,6 +44,9 @@ struct ConversationView: View {
     @State private var userDragging = false
     /// 这次拖动的方向。往上带就要立刻停止跟随，不能因为还贴着底又把跟随打开。
     @State private var dragIntent: ScrollDragIntent = .none
+    /// 用户这次会话里是否上划过。上划是"我要看历史"的意图，物理位置回弹到 0 也不该撤销它；
+    /// 只有下划或点「回到底部」才清掉。
+    @State private var hasSwipedUp = false
     /// 分页加载冷却，避免滚动到顶部时连续翻页。
     @State private var olderCooldownUntil = Date.distantPast
     /// 触发加载时是否已经贴在最顶部：此时加载完直接展示新一页，不做位置锚定。
@@ -257,8 +260,10 @@ struct ConversationView: View {
                             if value.translation.height > 2 {
                                 dragIntent = .up
                                 followsLatest = false
+                                hasSwipedUp = true
                             } else if value.translation.height < -2 {
                                 dragIntent = .down
+                                hasSwipedUp = false
                             }
                         }
                         .onEnded { _ in
@@ -381,7 +386,8 @@ struct ConversationView: View {
                     let atBottom = ScrollFollowPolicy.isAtBottom(distanceFromBottom: distance)
                     switch ScrollFollowPolicy.action(distanceFromBottom: distance,
                                                      drag: userDragging ? dragIntent : .none,
-                                                     followsLatest: followsLatest) {
+                                                     followsLatest: followsLatest,
+                                                     hasSwipedUp: hasSwipedUp) {
                     case .follow:
                         isAtBottom = true
                         unreadSinceSequence = nil
@@ -427,6 +433,7 @@ struct ConversationView: View {
                             unreadSinceSequence = nil
                             isAtBottom = true
                             followsLatest = true
+                            hasSwipedUp = false
                             scrollButtonTask?.cancel()
                             scrollButtonVisible = false
                             scrollToBottom(proxy: proxy, force: true)
