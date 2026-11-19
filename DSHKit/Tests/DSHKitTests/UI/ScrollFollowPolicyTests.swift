@@ -35,6 +35,27 @@ final class ScrollFollowPolicyTests: XCTestCase {
         )
     }
 
+    /// 贴底时轻微上划 = 内容被拽出边界（距离为负）。这时用户意图是"离开底部看历史"，
+    /// 不能因为负数仍满足 isAtBottom 就把跟随重新打开 —— 那就是"滑一下被弹回去"。
+    func testOverscrollAboveBottomStopsFollow() {
+        XCTAssertEqual(
+            ScrollFollowPolicy.action(distanceFromBottom: -5, drag: .none, followsLatest: true),
+            .stopFollow
+        )
+        XCTAssertEqual(
+            ScrollFollowPolicy.action(distanceFromBottom: -0.5, drag: .none, followsLatest: true),
+            .stopFollow
+        )
+    }
+
+    /// 回归：真正贴底（距离正好 0）时，不拖动的状态下仍应恢复跟随。
+    func testExactBottomStillRefollows() {
+        XCTAssertEqual(
+            ScrollFollowPolicy.action(distanceFromBottom: 0, drag: .none, followsLatest: false),
+            .follow
+        )
+    }
+
     func testLeavingBottomStopsFollow() {
         XCTAssertEqual(
             ScrollFollowPolicy.action(distanceFromBottom: 30, drag: .up, followsLatest: true),

@@ -32,13 +32,20 @@ public enum ScrollFollowPolicy {
 
     /// 滚动几何变化时的统一判定。
     ///
-    /// 关键一条：手指往上带时，即使还在贴底阈值内也要**停止跟随**。
+    /// 关键两条：
+    /// 1) 手指往上带时，即使还在贴底阈值内也要**停止跟随**；
+    /// 2) 距离为负（越界回弹）一律算「不在底部」。
     /// 否则拖动中途按「离底很近」重新开启跟随，随后的高度变化又会把内容拽回底部——
     /// 手感上就是「滑一点就被弹回去」。
     public static func action(distanceFromBottom: CGFloat,
                               drag: ScrollDragIntent,
                               followsLatest: Bool) -> ScrollFollowAction {
         if drag == .up { return .stopFollow }
+        // 距离为负 = 内容被拽出了边界（橡皮筋越界）。贴底时轻微上划就是这个状态：
+        // 用户意图明明是"离开底部看历史"，但负数仍然满足 isAtBottom，于是被判成"还在底部"
+        // 并立刻恢复跟随 —— 手感上就是"滑一下就被弹回去"。
+        // 越界一律视为不在底部；真正滚回底部时这个值会回到 0，那时才恢复跟随。
+        if distanceFromBottom < 0 { return .stopFollow }
         if isAtBottom(distanceFromBottom: distanceFromBottom) { return .follow }
         if drag != .none { return .stopFollow }
         return followsLatest ? .pinToBottom : .keep
