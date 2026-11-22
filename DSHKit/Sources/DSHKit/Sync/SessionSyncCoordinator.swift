@@ -167,10 +167,14 @@ public actor SessionSyncCoordinator {
     func handleFrame(_ data: Data) async throws {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         if let frame = DSHDecoding.streamFrame(fromJSON: json) {
-            // 只把正文增量发给上层；思考增量（`.reasoningDelta`）解码出来了但不消费——
-            // 气泡以落库的 assistant/message 里那段完整 reasoning 为准，不做逐字渲染。
-            if case .textDelta(let attemptId, _, let text) = frame {
+            switch frame {
+            case .textDelta(let attemptId, _, let text):
                 emit(.assistantDelta(attemptId: attemptId, text: text))
+            case .reasoningDelta(let attemptId, _, let text):
+                // 思考逐字到达：交给上层累积显示（桌面端也是实时刷的）
+                emit(.assistantReasoningDelta(attemptId: attemptId, text: text))
+            default:
+                break
             }
             return
         }

@@ -40,7 +40,12 @@ struct MessageRow: View {
 
     /// 这一条实际要显示的思考文本。
     private var displayReasoning: String { foldedReasoning ?? message.reasoning }
-    private var showsReasoning: Bool { showsReasoningOverride ?? message.text.isEmpty }
+    /// 一律默认收起（2026-11-23 用户两次要求）。
+    ///
+    /// 注意**不能**用「本条正文为空」当展开条件：一轮被工具调用打断时，轮首那条助手消息
+    /// 常见的形态正是「只有 thinking + tool_use、没有正文」，用它判断就等于「大多数带工具的轮
+    /// 都默认展开」——用户看到的就是「还是默认展开」。空气泡由 `isRenderable` 和折叠头兜住。
+    private var showsReasoning: Bool { showsReasoningOverride ?? false }
     /// 只在"复制成功"时递增，避免图标恢复时再触发一次触感。
     @State private var copyHapticTick = 0
 

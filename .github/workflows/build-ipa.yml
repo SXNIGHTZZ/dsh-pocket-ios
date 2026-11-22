@@ -41,6 +41,8 @@ jobs:
       - name: Archive (unsigned)
         run: |
           set -o pipefail
+          # CURRENT_PROJECT_VERSION 注入 CI 的 run 号：每出一版 build 号都不同，
+          # 手机上「设置 → 通用 → 关于」能直接看出装的是哪一版（之前三版都是 2，分不清）。
           xcodebuild archive \
             -project DSHPocket.xcodeproj \
             -scheme DSHPocket \
@@ -48,6 +50,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/DSHPocket.xcarchive" \
             -derivedDataPath "$RUNNER_TEMP/dd" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO

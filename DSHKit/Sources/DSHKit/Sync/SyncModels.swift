@@ -18,6 +18,8 @@ public enum SessionUpdate: Equatable, Sendable {
     case step(DSHStepEvent)
     case title(seq: Int, title: String)
     case assistantDelta(attemptId: String, text: String)
+    /// 思考增量。桌面端是逐字刷出来的，手机端也要跟上（2026-11-23 用户要求「跟 DSH 一致」）。
+    case assistantReasoningDelta(attemptId: String, text: String)
     case connection(SyncConnectionState)
     /// 更早历史是否还有（true = 还能继续 loadOlder）。
     case hasMore(Bool)

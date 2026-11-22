@@ -30,6 +30,9 @@ final class ConversationState {
     var conversationError: String?
     var isTurnRunning = false
     var turnStartedAt: Date?
+    /// 本轮正在逐字到达的思考（`reasoning-delta` 累积）。落库（assistant/message 到达）后清空，
+    /// 之后显示的是消息自带的完整 reasoning。桌面端也是这样边生成边刷。
+    var liveReasoning: String = ""
     var scrollToBottomTick = 0
     /// 最近一次收到实时帧的时间。**故意不参与观察**：
     /// 它每帧都会更新，若参与 @Observable 会让整个 ConversationView 每帧重绘

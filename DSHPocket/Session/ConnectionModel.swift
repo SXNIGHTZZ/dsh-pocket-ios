@@ -334,6 +334,11 @@ final class ConnectionModel {
         get { activeConversation?.turnEnds ?? [] }
         set { activeConversation?.turnEnds = newValue }
     }
+    /// 本轮正在逐字到达的思考（`reasoning-delta` 累积），落库后清空。
+    var liveReasoning: String {
+        get { activeConversation?.liveReasoning ?? "" }
+        set { activeConversation?.liveReasoning = newValue }
+    }
     var cancelledDraft = ""
     var cancelledImages: [PocketDraftImage] = []
 

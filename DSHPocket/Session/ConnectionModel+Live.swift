@@ -181,6 +181,8 @@ extension ConnectionModel {
             recordLiveFrameArrival()
             mergeMessages(dshMessages.map(Self.pocketMessage(from:)))
             for step in dshSteps { applyDSHStep(step, historical: true) }
+            // 快照是「已落库」的权威数据，逐字累积的临时思考到此为止。
+            conversation.liveReasoning = ""
             // 产品决策：只保留最近 30 条（约 15 轮），**不提供往上翻更早历史**。
             // 所以服务端说 hasMore 也一律关掉——分页触发条件里 hasMoreOlder 是硬门槛，
             // 关掉后上滑不会再请求，也就不会出现「加载了又被裁」的来回拉扯。
@@ -191,6 +193,10 @@ extension ConnectionModel {
         case .messages(let dshMessages):
             let beforeCount = messages.count
             mergeMessages(dshMessages.map(Self.pocketMessage(from:)))
+            // 助手消息落库：它自带的 reasoning 已经成为权威文本，别再叠一份流式的。
+            if dshMessages.contains(where: { !$0.isUser && !$0.reasoning.isEmpty }) {
+                conversation.liveReasoning = ""
+            }
             isLoadingConversation = false
             if isLoadingOlder {
                 isLoadingOlder = false
@@ -219,8 +225,12 @@ extension ConnectionModel {
         case .title(_, let title):
             updateSessionTitle(title)
         case .assistantDelta:
-            // 正文增量不逐字渲染；思考更不——气泡以落库消息里的完整 reasoning 为准。
+            // 正文增量不逐字渲染（会让整列表每帧重排）；只有思考走实时累积。
             break
+        case .assistantReasoningDelta(_, let text):
+            // 思考逐字到达：累积到本轮，落库后由消息自带的 reasoning 接管。
+            guard !text.isEmpty else { break }
+            conversation.liveReasoning += text
         }
     }
 
@@ -260,6 +270,8 @@ extension ConnectionModel {
         case .turnStart(let sequence, let turn):
             if !turnStarts.contains(sequence) { turnStarts.append(sequence) }
             isTurnRunning = true
+            // 新一轮开始：上一轮残留的逐字思考不能带进来
+            activeConversation?.liveReasoning = ""
             if turnStartedAt == nil { turnStartedAt = Date() }
             if let pendingTurn = activeConversation?.pendingQuestionTurn, turn > pendingTurn {
                 clearPendingQuestion()
@@ -282,6 +294,8 @@ extension ConnectionModel {
     func recordTurnFailure(sequence: Int, failure: DSHTurnFailure?) {
         if !turnEnds.contains(sequence) { turnEnds.append(sequence) }
         isTurnRunning = false
+        // 这一轮结束了：逐字累积的临时思考让位给落库的完整 reasoning
+        activeConversation?.liveReasoning = ""
         turnStartedAt = nil
         guard let failure else { return }
         guard !turnFailures.contains(where: { $0.sequence == sequence }) else { return }

@@ -166,6 +166,31 @@ struct ConversationView: View {
             .filter { isRenderable($0) }
     }
 
+    /// 本轮正在逐字到达的思考。落库后消息自带的 reasoning 接管，这一块自动消失。
+    ///
+    /// 用轻量 `Text`：思考可能很长，每帧都在增长，走 Markdown 会把列表拖垮。
+    private var liveReasoningRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: "brain").font(.caption2)
+                Text(L10n.t("思考")).font(.caption2.weight(.semibold))
+                ProgressView().scaleEffect(0.5).frame(width: 10, height: 10)
+                Text(L10n.tf("%d 字", model.liveReasoning.count))
+                    .font(.caption2).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.secondary)
+            Text(model.liveReasoning)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(Color.primary.opacity(0.04),
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
     /// 这一行值不值得画。
     ///
     /// 思考按轮合并后，同轮里「正文为空、只有思考」的后续消息会被搬空——既没正文也没思考，
@@ -302,6 +327,11 @@ struct ConversationView: View {
                                     }
                                 }.id(entry.id).padding(.top, topGap)
                             }
+                        }
+                        // 本轮正在逐字到达的思考（桌面端也是边生成边刷）。
+                        // 落库后消息自带的 reasoning 接管，这一块自动消失。
+                        if !model.liveReasoning.isEmpty {
+                            liveReasoningRow
                         }
                         // 底部锚点：滚动到它比"最后一条消息"更可靠（能带上后面的过程行/占位）。
                         // 底部留白：滚动是把这个锚点贴到视口底部，所以留白必须长在锚点自己身上。

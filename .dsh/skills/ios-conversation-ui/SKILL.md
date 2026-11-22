@@ -365,8 +365,16 @@ DSH 侧的事实（`DeepSeek/resources/app/dsh/node_modules` 里 `dsh-client-ui-
   是两条解析路径，任一条没带 `reasoning` 块，整条替换就把已经显示的思考抹成空（表现为「重连后思考消失」）。
   两处都改成「新 reasoning 为空、旧的非空 → 保留旧值」。
 - 渲染放在 `MessageRow` 里、助手正文之前（与桌面端同位置）：轻量 `Text`（不要 `MarkdownBody`），
-  头部可折叠。「思考 · N 字」那一行始终在，正文按需展开 —— **默认收起**（2026-11-23 用户明确要求：
+  头部可折叠。「思考 · N 字」那一行始终在，正文按需展开 —— **默认一律收起**（2026-11-23 用户两次要求：
   默认隐藏、点一下才打开；早先默认展开会把列表撑得很长，翻消息要先划过去一大段）。
+  **别拿「本条正文为空」当展开条件**：一轮被工具调用打断时，轮首那条助手消息常见形态是
+  「只有 thinking + tool_use、没有正文」，那样写等于让大多数带工具的轮默认展开——用户看到的就是
+  「还是默认展开」（这个坑被踩过一次，改完要按「有工具调用的轮」验）。
+- **思考要逐字到达**（与桌面端一致）：`assistant-stream` 的 `reasoning-delta` 由协调者 emit
+  `.assistantReasoningDelta`，`ConversationState.liveReasoning` 累积，`ConversationView` 在列表末尾
+  画一块实时思考（轻量 `Text` + `ProgressView`）；落库（`assistant/message` 带 reasoning）、
+  快照、`turn/end` 时清空，避免和落库文本叠两份。
+  正文增量仍然**不**逐字渲染——那是列表每帧重排的来源。
   精简行（`isCompact`）也保留同一个折叠头，别再按「最近几条」分档，否则同一个位置两套行为。
 - **同一轮的思考要合成一段**：一轮里模型被工具打断好几次就会有多条 `assistant/message`，每条都带自己的
   `reasoning` 块；逐条渲染的话一条回答上方会冒出好几段「思考」，看着是碎的。合并规则在
