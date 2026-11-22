@@ -368,6 +368,11 @@ DSH 侧的事实（`DeepSeek/resources/app/dsh/node_modules` 里 `dsh-client-ui-
   头部可折叠。「思考 · N 字」那一行始终在，正文按需展开 —— **默认收起**（2026-11-23 用户明确要求：
   默认隐藏、点一下才打开；早先默认展开会把列表撑得很长，翻消息要先划过去一大段）。
   精简行（`isCompact`）也保留同一个折叠头，别再按「最近几条」分档，否则同一个位置两套行为。
+- **同一轮的思考要合成一段**：一轮里模型被工具打断好几次就会有多条 `assistant/message`，每条都带自己的
+  `reasoning` 块；逐条渲染的话一条回答上方会冒出好几段「思考」，看着是碎的。合并规则在
+  `DSHKit/Conversation/ReasoningFold.swift`（纯逻辑 + 单测）：按 `turn/start` 的 seq 划分轮次，
+  同轮非空思考按 seq 拼成一段，只挂在**该轮第一条带思考的助手消息**上，其余返回空串。
+  拿不到轮次边界时不做折叠（各显各的），别退化成「把整段历史揉成一坨」。
   正文为空（只有思考的一轮）时用正文气泡同款底色，别让它变成一块浮空的卡片。
 - 折叠/展开会改行高：`MessageRow` 通过 `onToggleReasoning` 通知 `ConversationView` 递增 `scrollGeneration`
   并设 `suppressAutoScrollUntil`，与 `ProcessRow` 同一套处理。**不设的话，贴着底部时一点开就被拽到底部。**

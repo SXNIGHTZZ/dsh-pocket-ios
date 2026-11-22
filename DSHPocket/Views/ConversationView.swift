@@ -103,6 +103,20 @@ struct ConversationView: View {
         }
     }
 
+    /// 同一轮里多条助手消息的思考合并成一段（只挂在该轮第一条上）。
+    /// nil = 拿不到轮次边界（例如服务端没给 turn/start），此时每条各显各的，不做折叠。
+    private var foldedReasoningMap: [String: String]? {
+        let starts = model.turnStarts
+        guard !starts.isEmpty else { return nil }
+        let messages = model.messages
+            .sorted { $0.sequence < $1.sequence }
+            .map {
+                ReasoningFold.Message(id: $0.id, sequence: $0.sequence,
+                                      isUser: $0.isUser, reasoning: $0.reasoning)
+            }
+        return ReasoningFold.fold(messages, turnStartSeqs: starts)
+    }
+
     private var entries: [TimelineEntry] {
         guard isSwitchedToSession else { return [] }
         // 计时：把「一次重排要多久」量化出来，否则「卡不卡」只能凭感觉。
@@ -140,6 +154,19 @@ struct ConversationView: View {
                                         sequence: entry.sequence, isMessage: false))
         }
         return TimelineAssembly.ordered(keys).compactMap { byID[$0.id] }
+            .filter { isRenderable($0) }
+    }
+
+    /// 这一行值不值得画。
+    ///
+    /// 思考按轮合并后，同轮里「正文为空、只有思考」的后续消息会被搬空——既没正文也没思考，
+    /// 画出来就是一块空气泡。这种行整条略过，别让用户看到空壳。
+    private func isRenderable(_ entry: TimelineEntry) -> Bool {
+        guard let message = entry.message else { return true }   // 过程行 / 失败卡照旧
+        if message.isUser { return true }
+        if !message.text.isEmpty { return true }
+        if let folded = foldedReasoningMap { return !(folded[message.id] ?? "").isEmpty }
+        return !message.reasoning.isEmpty
     }
 
     /// 离开底部之后到达的助手回复条数（用户自己的消息不算）。
@@ -223,6 +250,7 @@ struct ConversationView: View {
                                 // 富文本行数是主要成本，压到常数级就能回到 60fps。
                                 MessageRow(message: message, model: model,
                                            isCompact: isCompactMessage(entry),
+                                           foldedReasoning: foldedReasoningMap.map { $0[message.id] ?? "" },
                                            onToggleReasoning: {
                                                // 展开/收起思考会改行高；贴着底部时先抑制补滚，
                                                // 否则用户一点开就被拽到列表底部（与过程行同一套处理）。

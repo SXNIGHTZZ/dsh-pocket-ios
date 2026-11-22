@@ -25,15 +25,22 @@ struct MessageRow: View {
     /// Markdown 富文本是滚动掉帧的主要成本（实测滚动时 20ms/帧 = 50fps），
     /// 把更早的消息降级成纯文本能把「同时参与绘制的富文本行数」压到常数级。
     var isCompact: Bool = false
+    /// 外层合并好的思考文本（同一轮多条助手消息的 reasoning 已并成一段，挂在轮首那条上）。
+    /// nil = 用消息自带的；空串 = 这一条不显示思考块。
+    var foldedReasoning: String? = nil
     @State private var previewItem: PreviewImageItem?
     @State private var copied = false
     /// 思考区展开状态。
     ///
-    /// 默认**收起**（2026-11-23 用户明确要求：默认隐藏，点一下才展开）。
-    /// 早先默认展开，长思考会把消息列表撑得很长，翻起来要先划过去一大段。
-    @State private var showsReasoning = false
+    /// 有正文时默认**收起**（2026-11-23 用户明确要求：默认隐藏、点一下才展开）；
+    /// 正文为空的那一轮（只有思考）默认展开——否则会剩一条「只有折叠头的空气泡」。
+    @State private var showsReasoningOverride: Bool?
     /// 折叠/展开思考时通知外层（抑制自动贴底），否则一点开就被拽到列表底部。
     var onToggleReasoning: (() -> Void)? = nil
+
+    /// 这一条实际要显示的思考文本。
+    private var displayReasoning: String { foldedReasoning ?? message.reasoning }
+    private var showsReasoning: Bool { showsReasoningOverride ?? message.text.isEmpty }
     /// 只在"复制成功"时递增，避免图标恢复时再触发一次触感。
     @State private var copyHapticTick = 0
 
@@ -74,18 +81,18 @@ struct MessageRow: View {
     /// 「解析 + 布局」的成本乘到每条消息上（仓库里 LazyVStack 那堆坑就是这么来的）。
     @ViewBuilder
     private var reasoningBlock: some View {
-        if !message.isUser, !message.reasoning.isEmpty {
+        if !message.isUser, !displayReasoning.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 Button {
                     onToggleReasoning?()
                     withAnimation(PocketMotion.animation(.easeInOut(duration: 0.15))) {
-                        showsReasoning.toggle()
+                        showsReasoningOverride = !showsReasoning
                     }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "brain").font(.caption2)
                         Text(L10n.t("思考")).font(.caption2.weight(.semibold))
-                        Text(L10n.tf("%d 字", message.reasoning.count))
+                        Text(L10n.tf("%d 字", displayReasoning.count))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 0)
@@ -98,7 +105,7 @@ struct MessageRow: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(L10n.t(showsReasoning ? "收起思考" : "展开思考"))
                 if showsReasoning {
-                    Text(message.reasoning)
+                    Text(displayReasoning)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
@@ -106,14 +113,15 @@ struct MessageRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            // 正文为空（只有思考的一轮）时用正文气泡同款底色，别让它变成一块浮空的卡片。
-            .padding(.horizontal, message.text.isEmpty ? 14 : 12)
-            .padding(.vertical, message.text.isEmpty ? 11 : 9)
+            // 正文为空（只有思考的一轮）时才做成气泡样式；有正文时它只是正文上方的一条浅底条，
+            // 别再套一层大圆角空白，否则收起状态下会看成一条空消息。
+            .padding(.horizontal, message.text.isEmpty ? 14 : 10)
+            .padding(.vertical, message.text.isEmpty ? 11 : 7)
             .background(
                 message.text.isEmpty
                     ? AnyShapeStyle(Color(red: 0.949, green: 0.949, blue: 0.965))
                     : AnyShapeStyle(Color.primary.opacity(0.04)),
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                in: RoundedRectangle(cornerRadius: message.text.isEmpty ? 18 : 10, style: .continuous)
             )
         }
     }
