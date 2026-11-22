@@ -64,4 +64,20 @@ final class ReasoningFoldTests: XCTestCase {
         XCTAssertNil(result["a1"])
         XCTAssertEqual(result["a2"], "真内容")
     }
+
+    // 回归：快照窗口从中间截断时，早于窗口里第一个 turn/start 的消息不能被揉成一组
+    func testMessagesBeforeFirstTurnStartKeepOwn() {
+        let messages = [
+            msg("old1", 1, "老轮次甲"),
+            msg("old2", 4, "老轮次乙"),
+            msg("u1", 10, user: true, ""),
+            msg("a1", 12, "本窗口第一轮"),
+            msg("a2", 14, "本窗口第一轮-续")
+        ]
+        let result = ReasoningFold.fold(messages, turnStartSeqs: [11])
+        XCTAssertEqual(result["old1"], "老轮次甲", "窗口外的消息各显各的")
+        XCTAssertEqual(result["old2"], "老轮次乙")
+        XCTAssertEqual(result["a1"], "本窗口第一轮\n\n本窗口第一轮-续", "窗口内仍然按轮合并")
+        XCTAssertNil(result["a2"])
+    }
 }

@@ -31,6 +31,10 @@ public enum ReasoningFold {
         var startIndex = 0
         var currentChunk: [String] = []
         var currentOwner: String?
+        // 快照窗口可能从中间截断：最早那些消息可能早于窗口里第一个 turn/start。
+        // 它们没有可靠的轮次边界，必须各显各的——硬塞进同一组会把好几个历史轮次的思考
+        // 挤成一大段挂在最早那条上，其余条目还会因为 folded 为空被整行丢掉。
+        let firstStart = starts.first ?? Int.max
 
         func flush() {
             if let owner = currentOwner {
@@ -41,6 +45,12 @@ public enum ReasoningFold {
         }
 
         for message in messages {
+            if message.sequence < firstStart {
+                guard !message.isUser else { continue }
+                let text = message.reasoning.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty { result[message.id] = text }
+                continue
+            }
             // 这条消息之前最近的一个 turn/start 就是它所属的轮
             var nextTurn = turnKey
             while startIndex < starts.count && starts[startIndex] <= message.sequence {
