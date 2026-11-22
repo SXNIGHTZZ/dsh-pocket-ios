@@ -166,31 +166,6 @@ struct ConversationView: View {
             .filter { isRenderable($0) }
     }
 
-    /// 本轮正在逐字到达的思考。落库后消息自带的 reasoning 接管，这一块自动消失。
-    ///
-    /// 用轻量 `Text`：思考可能很长，每帧都在增长，走 Markdown 会把列表拖垮。
-    private var liveReasoningRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Image(systemName: "brain").font(.caption2)
-                Text(L10n.t("思考")).font(.caption2.weight(.semibold))
-                ProgressView().scaleEffect(0.5).frame(width: 10, height: 10)
-                Text(L10n.tf("%d 字", model.liveReasoning.count))
-                    .font(.caption2).foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(.secondary)
-            Text(model.liveReasoning)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 12).padding(.vertical, 9)
-        .background(Color.primary.opacity(0.04),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
     /// 这一行值不值得画。
     ///
     /// 思考按轮合并后，同轮里「正文为空、只有思考」的后续消息会被搬空——既没正文也没思考，
@@ -330,9 +305,11 @@ struct ConversationView: View {
                         }
                         // 本轮正在逐字到达的思考（桌面端也是边生成边刷）。
                         // 落库后消息自带的 reasoning 接管，这一块自动消失。
-                        if !model.liveReasoning.isEmpty {
-                            liveReasoningRow
-                        }
+                        //
+                        // 注意：传的是 model，读取 `liveReasoning` 的动作在子视图里发生。
+                        // 如果父视图自己读它，每来一帧思考都会让整个列表重算（entries 里的全量折叠
+                        // 也跟着重算），10–50Hz 下必掉帧。
+                        LiveReasoningBlock(model: model)
                         // 底部锚点：滚动到它比"最后一条消息"更可靠（能带上后面的过程行/占位）。
                         // 底部留白：滚动是把这个锚点贴到视口底部，所以留白必须长在锚点自己身上。
                         // 靠外层 padding 会被滚出屏幕，视觉上就是最后一条消息贴着输入栏（踩过）。
@@ -766,4 +743,39 @@ struct ConversationView: View {
         }
     }
 
+}
+
+/// 本轮正在逐字到达的思考（`reasoning-delta` 累积）。
+///
+/// 单独做成一个 View 是有意的：`liveReasoning` 每来一帧就变（10–50Hz）。如果让会话列表
+/// 自己的 body 读它，整个列表就会按这个频率重算——包括 `entries` 里的全量思考折叠
+/// （`.sorted` + 字符串拼接）和每条 `MessageRow` 的重建，长会话必掉帧。
+/// 放在子视图里读，只有这一块重绘。
+private struct LiveReasoningBlock: View {
+    let model: ConnectionModel
+
+    var body: some View {
+        let text = model.liveReasoning
+        if !text.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Image(systemName: "brain").font(.caption2)
+                    Text(L10n.t("思考")).font(.caption2.weight(.semibold))
+                    ProgressView().scaleEffect(0.5).frame(width: 10, height: 10)
+                    Text(L10n.tf("%d 字", text.count))
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.secondary)
+                Text(text)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(Color.primary.opacity(0.04),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
 }
