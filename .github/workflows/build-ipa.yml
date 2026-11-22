@@ -65,6 +65,10 @@ jobs:
             exit 1
           fi
           mkdir -p "$RUNNER_TEMP/Payload"
+          # Info.plist 里的 CFBundleVersion 是写死的 "2"，命令行覆盖 CURRENT_PROJECT_VERSION 没用
+          # （pbxproj 里根本没这个键）。这里直接改，装到手机上「设置 → 通用 → 关于」就能看到
+          # 是第几次构建，多个版本之间不会再分不清。
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" "$APP/Info.plist"
           cp -R "$APP" "$RUNNER_TEMP/Payload/"
           cd "$RUNNER_TEMP"
           zip -qry "DSHPocket-unsigned.ipa" Payload
