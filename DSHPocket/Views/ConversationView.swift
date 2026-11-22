@@ -70,6 +70,12 @@ struct ConversationView: View {
         let message: PocketMessage?
         let group: PocketStepGroup?
         let failure: TurnFailureNotice?
+        /// 合并后的思考（同一轮多条助手消息并成一段，只挂在轮首那条上）。
+        /// nil = 不做折叠，用消息自带的 reasoning；空串 = 这一条不显示思考块。
+        ///
+        /// 存进 entry 而不是渲染时现算：`fold` 要全量排序 + 拼字符串，
+        /// 在 ForEach 里按行调用会变成 O(n²)，长会话滚动会明显掉帧。
+        var foldedReasoning: String? = nil
     }
 
     /// 是否已经切到本页要显示的会话。切换完成前不渲染，避免首帧闪出上一条的内容。
@@ -127,13 +133,16 @@ struct ConversationView: View {
             model.lastRenderStepGroupCount = model.stepGroups.count
         }
         // 排序规则在 DSHKit（可测）；这里只负责把元素映射成排序键、再映射回来。
+        // 思考折叠只在这里算一次（每条 entry 带上结果），渲染时不再现算。
+        let folded = foldedReasoningMap
         var byID: [String: TimelineEntry] = [:]
         var keys: [TimelineSortKey] = []
         for message in model.messages {
             let entry = TimelineEntry(id: message.id,
                                       sortKey: model.displaySortKey(for: message),
                                       sequence: message.sequence,
-                                      message: message, group: nil, failure: nil)
+                                      message: message, group: nil, failure: nil,
+                                      foldedReasoning: folded.map { $0[message.id] ?? "" })
             byID[entry.id] = entry
             keys.append(TimelineSortKey(id: entry.id, sortKey: entry.sortKey, sequence: entry.sequence,
                                         isMessage: true, isPending: message.isPending,
@@ -165,7 +174,7 @@ struct ConversationView: View {
         guard let message = entry.message else { return true }   // 过程行 / 失败卡照旧
         if message.isUser { return true }
         if !message.text.isEmpty { return true }
-        if let folded = foldedReasoningMap { return !(folded[message.id] ?? "").isEmpty }
+        if let folded = entry.foldedReasoning { return !folded.isEmpty }
         return !message.reasoning.isEmpty
     }
 
@@ -250,7 +259,7 @@ struct ConversationView: View {
                                 // 富文本行数是主要成本，压到常数级就能回到 60fps。
                                 MessageRow(message: message, model: model,
                                            isCompact: isCompactMessage(entry),
-                                           foldedReasoning: foldedReasoningMap.map { $0[message.id] ?? "" },
+                                           foldedReasoning: entry.foldedReasoning,
                                            onToggleReasoning: {
                                                // 展开/收起思考会改行高；贴着底部时先抑制补滚，
                                                // 否则用户一点开就被拽到列表底部（与过程行同一套处理）。
