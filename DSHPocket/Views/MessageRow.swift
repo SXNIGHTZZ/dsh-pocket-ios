@@ -27,10 +27,11 @@ struct MessageRow: View {
     var isCompact: Bool = false
     @State private var previewItem: PreviewImageItem?
     @State private var copied = false
-    /// 思考区展开状态。`nil` = 跟随默认：最近几条（非精简）默认展开，更早的精简行默认收起。
-    /// 用户点过之后以点击为准（否则精简行永远打不开，「完整显示」就打折了）。
-    @State private var reasoningOverride: Bool?
-    private var showsReasoning: Bool { reasoningOverride ?? !isCompact }
+    /// 思考区展开状态。
+    ///
+    /// 默认**收起**（2026-11-23 用户明确要求：默认隐藏，点一下才展开）。
+    /// 早先默认展开，长思考会把消息列表撑得很长，翻起来要先划过去一大段。
+    @State private var showsReasoning = false
     /// 折叠/展开思考时通知外层（抑制自动贴底），否则一点开就被拽到列表底部。
     var onToggleReasoning: (() -> Void)? = nil
     /// 只在"复制成功"时递增，避免图标恢复时再触发一次触感。
@@ -78,7 +79,7 @@ struct MessageRow: View {
                 Button {
                     onToggleReasoning?()
                     withAnimation(PocketMotion.animation(.easeInOut(duration: 0.15))) {
-                        reasoningOverride = !showsReasoning
+                        showsReasoning.toggle()
                     }
                 } label: {
                     HStack(spacing: 4) {
