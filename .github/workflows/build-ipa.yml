@@ -41,8 +41,8 @@ jobs:
       - name: Archive (unsigned)
         run: |
           set -o pipefail
-          # CURRENT_PROJECT_VERSION 注入 CI 的 run 号：每出一版 build 号都不同，
-          # 手机上「设置 → 通用 → 关于」能直接看出装的是哪一版（之前三版都是 2，分不清）。
+          # build 号在这里注入没用（pbxproj 里没有 CURRENT_PROJECT_VERSION 这个键，
+          # Info.plist 的 CFBundleVersion 是写死的 "2"），真正的设置下一步用 PlistBuddy 做。
           xcodebuild archive \
             -project DSHPocket.xcodeproj \
             -scheme DSHPocket \
@@ -50,7 +50,6 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/DSHPocket.xcarchive" \
             -derivedDataPath "$RUNNER_TEMP/dd" \
-            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
@@ -81,6 +80,12 @@ jobs:
             || { echo "::error::ipa 里没有主可执行文件"; exit 1; }
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist"
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist"
+          # build 号必须真的等于这次 run 号：否则手机上分不清装的是哪一版，
+          # 而 CI 仍然全绿（这次就吃过一回——命令行覆盖无效、包里还是写死的 2）。
+          BUILT=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist" | tr -d '\r\n')
+          echo "build = $BUILT (期望 ${GITHUB_RUN_NUMBER})"
+          [ "$BUILT" = "${GITHUB_RUN_NUMBER}" ] \
+            || { echo "::error::ipa 里的 CFBundleVersion 是 $BUILT，不是本次 run 号 ${GITHUB_RUN_NUMBER}"; exit 1; }
           shasum -a 256 "DSHPocket-unsigned.ipa"
 
       - name: Upload ipa
