@@ -69,9 +69,16 @@ public struct DSHMessage: Identifiable, Equatable, Sendable {
     public let isUser: Bool
     public let rpcId: String?
     public let images: [DSHImageRef]
+    /// 助手这一轮的思考（`content` 里 `type == "reasoning"` 的块拼起来）。
+    ///
+    /// 桌面端把思考渲染在回复上方；手机端 2026-11-22 之前**整个丢掉了**：
+    /// `message(fromEvent:)` 只收 `text` 块，`streamFrame` 只认 `text-delta`，
+    /// 于是 reasoning 块进不了模型，界面上一个字都没有。
+    public let reasoning: String
 
     public init(id: String, sequence: Int, kind: String, text: String,
-                isUser: Bool, rpcId: String? = nil, images: [DSHImageRef] = []) {
+                isUser: Bool, rpcId: String? = nil, images: [DSHImageRef] = [],
+                reasoning: String = "") {
         self.id = id
         self.sequence = sequence
         self.kind = kind
@@ -79,6 +86,7 @@ public struct DSHMessage: Identifiable, Equatable, Sendable {
         self.isUser = isUser
         self.rpcId = rpcId
         self.images = images
+        self.reasoning = reasoning
     }
 }
 
@@ -133,6 +141,11 @@ public enum DSHRecord: Equatable, Sendable {
 public enum DSHStreamFrame: Equatable, Sendable {
     case start(attemptId: String, turn: Int, step: Int)
     case textDelta(attemptId: String, index: Int, text: String)
+    /// 思考增量（`chunk.type == "reasoning-delta"`）。
+    ///
+    /// 以前归进 `.other` 直接扔掉——测试 `DecodingExtraTests` 还把「等于 .other」写死了，
+    /// 等于把「思考不显示」当契约固化。现在单独放行，交给上层决定要不要渲染。
+    case reasoningDelta(attemptId: String, index: Int, text: String)
     case end(attemptId: String, outcome: String?)
     case other
 }

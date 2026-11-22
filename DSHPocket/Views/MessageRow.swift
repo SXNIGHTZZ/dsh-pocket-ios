@@ -27,6 +27,12 @@ struct MessageRow: View {
     var isCompact: Bool = false
     @State private var previewItem: PreviewImageItem?
     @State private var copied = false
+    /// 思考区展开状态。`nil` = 跟随默认：最近几条（非精简）默认展开，更早的精简行默认收起。
+    /// 用户点过之后以点击为准（否则精简行永远打不开，「完整显示」就打折了）。
+    @State private var reasoningOverride: Bool?
+    private var showsReasoning: Bool { reasoningOverride ?? !isCompact }
+    /// 折叠/展开思考时通知外层（抑制自动贴底），否则一点开就被拽到列表底部。
+    var onToggleReasoning: (() -> Void)? = nil
     /// 只在"复制成功"时递增，避免图标恢复时再触发一次触感。
     @State private var copyHapticTick = 0
 
@@ -58,6 +64,57 @@ struct MessageRow: View {
         guard !quoteLines.isEmpty else { return nil }
         let rest = lines[index...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return (quoteLines.joined(separator: "\n"), rest)
+    }
+
+    /// 助手这一轮的思考（`content` 里的 reasoning 块）。
+    ///
+    /// 位置跟桌面端一致：回复正文上方、同一个气泡里。
+    /// 用轻量 `Text` 而不是 `MarkdownBody`：思考通常很长，走 Textual 会把
+    /// 「解析 + 布局」的成本乘到每条消息上（仓库里 LazyVStack 那堆坑就是这么来的）。
+    @ViewBuilder
+    private var reasoningBlock: some View {
+        if !message.isUser, !message.reasoning.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Button {
+                    onToggleReasoning?()
+                    withAnimation(PocketMotion.animation(.easeInOut(duration: 0.15))) {
+                        reasoningOverride = !showsReasoning
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "brain").font(.caption2)
+                        Text(L10n.t("思考")).font(.caption2.weight(.semibold))
+                        Text(L10n.tf("%d 字", message.reasoning.count))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                        Image(systemName: showsReasoning ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.t(showsReasoning ? "收起思考" : "展开思考"))
+                if showsReasoning {
+                    Text(message.reasoning)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            // 正文为空（只有思考的一轮）时用正文气泡同款底色，别让它变成一块浮空的卡片。
+            .padding(.horizontal, message.text.isEmpty ? 14 : 12)
+            .padding(.vertical, message.text.isEmpty ? 11 : 9)
+            .background(
+                message.text.isEmpty
+                    ? AnyShapeStyle(Color(red: 0.949, green: 0.949, blue: 0.965))
+                    : AnyShapeStyle(Color.primary.opacity(0.04)),
+                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+            )
+        }
     }
 
     /// 气泡内的 Markdown（含原位置插图）。
@@ -236,6 +293,8 @@ struct MessageRow: View {
                         .layoutDebug("C3", text: LayoutDebug.font(.body))
                         .foregroundStyle(.white)
                     } else {
+                        // 思考在回复正文上方（与桌面端同位置）。
+                        reasoningBlock
                         // 助手消息里的 attachment 图片仍显示在气泡上方。
                         if !message.isUser, !message.localImages.isEmpty {
                             ForEach(Array(message.localImages.enumerated()), id: \.offset) { _, image in

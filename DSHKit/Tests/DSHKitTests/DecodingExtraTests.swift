@@ -29,9 +29,50 @@ final class DecodingExtraTests: XCTestCase {
             "frame": ["type": "chunk", "attemptId": "a1", "index": 0,
                       "chunk": ["type": "reasoning-delta", "text": "thinking"]]
         ]
-        XCTAssertEqual(DSHDecoding.streamFrame(fromJSON: reasoning), .other)
+        // 2026-11-22 改：以前这里断言「等于 .other」，等于把「思考不显示」写成契约。
+        // 现在 reasoning-delta 必须解出独立的帧，否则手机上永远看不到思考过程。
+        guard case .reasoningDelta(let reasoningId, let reasoningIndex, let reasoningText)? =
+                DSHDecoding.streamFrame(fromJSON: reasoning) else {
+            return XCTFail("expected reasoningDelta")
+        }
+        XCTAssertEqual(reasoningId, "a1")
+        XCTAssertEqual(reasoningIndex, 0)
+        XCTAssertEqual(reasoningText, "thinking")
         XCTAssertNil(DSHDecoding.streamFrame(fromJSON: ["type": "assistant-stream"]))
         XCTAssertNil(DSHDecoding.streamFrame(fromJSON: ["type": "event"]))
+    }
+
+    // 回归：assistant/message 的 content 里 reasoning 块不能丢（2026-11-22）
+    func testAssistantMessageReasoningBlockDecoded() {
+        let event: [String: Any] = [
+            "type": "assistant/message",
+            "seq": 42,
+            "data": ["message": ["role": "assistant", "content": [
+                ["type": "reasoning", "text": "先看目录，再决定改哪个文件。"],
+                ["type": "text", "text": "改好了。"]
+            ]]]
+        ]
+        guard let message = DSHDecoding.message(fromEvent: event) else {
+            return XCTFail("expected message")
+        }
+        XCTAssertEqual(message.text, "改好了。")
+        XCTAssertEqual(message.reasoning, "先看目录，再决定改哪个文件。")
+    }
+
+    // 只有思考、没有正文的一轮也要留下（桌面端就是「只有 reasoning 的 step」）
+    func testReasoningOnlyMessageSurvives() {
+        let event: [String: Any] = [
+            "type": "assistant/message",
+            "seq": 43,
+            "data": ["message": ["role": "assistant", "content": [
+                ["type": "reasoning", "text": "这一步不需要输出正文。"]
+            ]]]
+        ]
+        guard let message = DSHDecoding.message(fromEvent: event) else {
+            return XCTFail("expected reasoning-only message")
+        }
+        XCTAssertEqual(message.text, "")
+        XCTAssertEqual(message.reasoning, "这一步不需要输出正文。")
     }
 
     func testToolResultErrorFlag() {
@@ -114,7 +155,6 @@ final class DecodingExtraTests: XCTestCase {
         }
         XCTAssertThrowsError(try RPCRequest.value(from: Data(#"{"result":{}}"#.utf8)))
     }
-}
 
     // 回归：tool/result 的 callId/isError 可能在 message/source 里（字段位置兜底）
     func testToolResultCallIdAndIsErrorFallbacks() {
@@ -147,3 +187,4 @@ final class DecodingExtraTests: XCTestCase {
         ]
         XCTAssertEqual(DSHDecoding.session(fromJSON: json)?.title, "嵌套标题")
     }
+}

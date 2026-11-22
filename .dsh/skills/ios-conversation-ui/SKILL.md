@@ -335,3 +335,44 @@ xcrun devicectl device process launch --device <UDID> com.ruska.dsh-pocket-ios
 **曾犯过的错**（2026-11-21）：想当然认为「每个用户有自己的 Mac 和 DSH」就能各自发推送，
 花两小时做完 APNs 全链路才发现凭证归属问题——用户没 Key，方案对公众用户是死的。
 详细记录见 `~/projects/skill/代码编写规范/ios踩坑记录.md` 第 29 条。
+
+## 思考过程（reasoning）显示（2026-11-22）
+
+**现象**：桌面端回复上方有完整的思考，手机上一个字都没有；「过程」那行只有工具步骤。
+
+**原因（两层，都在协议层，不在 UI）**：
+
+1. `DSHDecoding.message(fromEvent:)` 只收 `content` 里 `type == "text"` 的块，`type == "reasoning"` 被静默丢弃；
+   `PocketMessage.init(event:)` 里还有一份同样的解析，也是只收 text。**同一段逻辑写了两遍**，改一边不够。
+2. `DSHDecoding.streamFrame` 只把 `text-delta` 解成 `.textDelta`，`reasoning-delta` 落进 `default: .other`；
+   而且 `DecodingExtraTests` 当时断言「reasoning-delta == .other」，等于把「不显示思考」写成了契约——
+   改行为时必须同步改这条断言，否则测试会拦你，但拦的理由是错的。
+
+DSH 侧的事实（`DeepSeek/resources/app/dsh/node_modules` 里 `dsh-client-ui-chat` 与其它包）：
+思考在历史里是 assistant message 的一个 content block（`block.kind/type === "reasoning"`，带 `text`），
+实时流里是 `assistant-stream` 的 `chunk.type === "reasoning-delta"`，与 `text-delta` 并列。
+
+**处理**：
+
+- `DSHMessage` / `PocketMessage` 各加一个 `reasoning` 字段，两个解析点都收 reasoning 块；
+  `guard` 的条件要加上 `|| !reasoning.isEmpty`，否则「只有思考没有正文」的那一轮会被整条丢掉。
+- `DSHStreamFrame` 加 `.reasoningDelta`，**只解码、不接进 `SessionUpdate`**。原方案是
+  `.reasoningDelta` → `SessionUpdate.assistantReasoningDelta` → 协调者 `emit` → 上层 `break` 丢弃，
+  编队两路都指出这条链对用户可见行为零贡献，白加两个 `public enum` case（未穷尽的 switch 会编译失败）。
+  解码留着是给将来做流式留口子，接线的时候再补。
+- **合并要「新值空就留旧值」**：`SessionSyncCoordinator.mergeMessage` 和
+  `ConnectionModel.mergeMessages` 都是按 sequence 整条替换；HTTP 兜底（`session/page`）与 WS 快照
+  是两条解析路径，任一条没带 `reasoning` 块，整条替换就把已经显示的思考抹成空（表现为「重连后思考消失」）。
+  两处都改成「新 reasoning 为空、旧的非空 → 保留旧值」。
+- 渲染放在 `MessageRow` 里、助手正文之前（与桌面端同位置）：轻量 `Text`（不要 `MarkdownBody`），
+  头部可折叠。默认展开规则：最近几条（非 `isCompact`）展开，更早的精简行收起——**但精简行也能点开**，
+  否则「完整显示」在最需要翻历史的地方失效。正文为空（只有思考的一轮）时用正文气泡同款底色，
+  别让它变成一块浮空的卡片。
+- 折叠/展开会改行高：`MessageRow` 通过 `onToggleReasoning` 通知 `ConversationView` 递增 `scrollGeneration`
+  并设 `suppressAutoScrollUntil`，与 `ProcessRow` 同一套处理。**不设的话，贴着底部时一点开就被拽到底部。**
+- 顺手修的既有问题：`DecodingExtraTests` 的类在文件中间就闭合了，最后两条测试写在类外成了全局函数，
+  XCTest 根本不会跑它们（等于从未验证）。
+
+**判据**：改完在演示模式或真机上看一条带思考的会话，气泡上方应出现「思考 · N 字」，展开是完整原文；
+`swift test` 里 `testAssistantMessageReasoningBlockDecoded` / `testReasoningOnlyMessageSurvives` 必须绿。
+注意 DSHKit 改了必须全新构建（见 AGENTS.md 3.6），否则真机上还是旧二进制。

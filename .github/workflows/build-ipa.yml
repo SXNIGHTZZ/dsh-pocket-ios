@@ -1,0 +1,85 @@
+name: Build unsigned IPA
+
+# 目的：在没有 Mac 的机器上产出一个可安装的 ipa。
+# 编出来的包是**未签名**的，函数名和描述文件都不带——下载后用全能签等工具重签再装。
+#
+# 为什么不用 xcodebuild -exportArchive：导出 ipa 必须签名（需要证书 + 描述文件），
+# 免费 Apple ID 拿不到 CI 可用的证书。所以走「archive 不签名 → 手工塞进 Payload/ → zip」这条路，
+# 得到的 ipa 与 Xcode 导出物结构一致，全能签可以直接吃。
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/reasoning-display
+
+jobs:
+  ipa:
+    name: unit tests + unsigned ipa
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer"
+          xcodebuild -version
+          swift --version
+
+      - name: DSHKit unit tests
+        working-directory: DSHKit
+        run: swift test
+
+      - name: Resolve Swift package dependencies
+        run: |
+          xcodebuild -project DSHPocket.xcodeproj \
+            -scheme DSHPocket \
+            -destination 'generic/platform=iOS' \
+            -resolvePackageDependencies
+
+      - name: Archive (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project DSHPocket.xcodeproj \
+            -scheme DSHPocket \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/DSHPocket.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package into ipa
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/DSHPocket.xcarchive/Products/Applications/DSHPocket.app"
+          if [ ! -d "$APP" ]; then
+            echo "::error::找不到 .app，下面是 archive 里的实际内容："
+            find "$RUNNER_TEMP/DSHPocket.xcarchive" -maxdepth 4 -name "*.app" -print || true
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qry "DSHPocket-unsigned.ipa" Payload
+          # 自检：ipa 里必须有可执行文件，不能只有一个空壳。
+          # 列表先落盘再读：`unzip -l | head` / `| grep -q` 会让 unzip 吃 SIGPIPE（退出码 141），
+          # 在 `set -o pipefail` 下整步被判失败——明明包是好的却报「没有主可执行文件」。
+          unzip -l "DSHPocket-unsigned.ipa" > "$RUNNER_TEMP/ipa-list.txt"
+          head -30 "$RUNNER_TEMP/ipa-list.txt"
+          grep -q "Payload/DSHPocket.app/DSHPocket" "$RUNNER_TEMP/ipa-list.txt" \
+            || { echo "::error::ipa 里没有主可执行文件"; exit 1; }
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist"
+          shasum -a 256 "DSHPocket-unsigned.ipa"
+
+      - name: Upload ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSHPocket-unsigned-ipa
+          path: ${{ runner.temp }}/DSHPocket-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14

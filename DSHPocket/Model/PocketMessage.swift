@@ -23,6 +23,9 @@ struct PocketMessage: Identifiable {
     let text: String
     let isUser: Bool
     let isPending: Bool
+    /// 助手这一轮的思考原文。历史里它是 content 里独立的 `reasoning` 块，
+    /// 手机端以前只取 `text` 块，所以这块一直显示不出来（2026-11-22 补上）。
+    var reasoning: String = ""
     /// 待发消息在会话里的显示排序位置（发送时刻最后一条已确认消息的 sequence）。
     var localSortKey: Int? = nil
     /// 本地发送顺序（毫秒时间戳）。同一位置有多条待发时靠它保持先发先显，
@@ -61,13 +64,14 @@ struct PocketMessage: Identifiable {
     }
 
     init(sequence: Int, kind: String, text: String, isUser: Bool,
-         rpcId: String?, images: [PocketImageRef]) {
+         rpcId: String?, images: [PocketImageRef], reasoning: String = "") {
         self.id = "event-\(sequence)"
         self.sequence = sequence
         self.kind = kind
         self.text = text
         self.isUser = isUser
         self.isPending = false
+        self.reasoning = reasoning
         self.images = images
         self.localImages = []
         self.rpcId = RPCId.normalized(rpcId)
@@ -95,18 +99,23 @@ struct PocketMessage: Identifiable {
             guard block["type"] as? String == "text" else { return nil }
             return block["text"] as? String
         }.joined()
+        let reasoning = content.compactMap { block -> String? in
+            guard block["type"] as? String == "reasoning" else { return nil }
+            return block["text"] as? String
+        }.joined()
         let images = content.compactMap { block -> PocketImageRef? in
             guard block["type"] as? String == "image",
                   let attachment = block["attachment"] as? [String: Any] else { return nil }
             return PocketImageRef(json: attachment)
         }
-        guard !text.isEmpty || !images.isEmpty else { return nil }
+        guard !text.isEmpty || !images.isEmpty || !reasoning.isEmpty else { return nil }
         self.id = "event-\(sequence)"
         self.sequence = sequence
         self.kind = kind
         self.text = text
         self.isUser = kind == "user/message"
         self.isPending = false
+        self.reasoning = reasoning
         self.images = images
         self.localImages = []
         self.rpcId = RPCId.normalized(source?["rpcId"] as? String)

@@ -219,6 +219,7 @@ extension ConnectionModel {
         case .title(_, let title):
             updateSessionTitle(title)
         case .assistantDelta:
+            // 正文增量不逐字渲染；思考更不——气泡以落库消息里的完整 reasoning 为准。
             break
         }
     }
@@ -312,7 +313,8 @@ extension ConnectionModel {
                                          width: $0.width,
                                          height: $0.height,
                                          name: $0.name)
-                      })
+                      },
+                      reasoning: message.reasoning)
     }
 
     static func appConnectionState(from state: SyncConnectionState) -> LiveConnectionState {

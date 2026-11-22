@@ -39,8 +39,14 @@ public enum DSHDecoding {
             guard block["type"] as? String == "text" else { return nil }
             return block["text"] as? String
         }.joined()
+        // 思考块：和 text 块并列放在同一个 assistant/message 的 content 里。
+        // 以前这里只收 text，reasoning 被静默丢弃——手机上就「看不到思考」。
+        let reasoning = content.compactMap { block -> String? in
+            guard block["type"] as? String == "reasoning" else { return nil }
+            return block["text"] as? String
+        }.joined()
         let images = content.compactMap(imageRef(from:))
-        guard !text.isEmpty || !images.isEmpty else { return nil }
+        guard !text.isEmpty || !images.isEmpty || !reasoning.isEmpty else { return nil }
         return DSHMessage(
             id: "event-\(sequence)",
             sequence: sequence,
@@ -48,7 +54,8 @@ public enum DSHDecoding {
             text: text,
             isUser: kind == "user/message",
             rpcId: RPCId.normalized(source?["rpcId"] as? String),
-            images: images
+            images: images,
+            reasoning: reasoning
         )
     }
 
@@ -161,6 +168,10 @@ public enum DSHDecoding {
                 return .textDelta(attemptId: attemptId,
                                   index: (frame["index"] as? NSNumber)?.intValue ?? 0,
                                   text: chunk["text"] as? String ?? "")
+            case "reasoning-delta":
+                return .reasoningDelta(attemptId: attemptId,
+                                       index: (frame["index"] as? NSNumber)?.intValue ?? 0,
+                                       text: chunk["text"] as? String ?? "")
             default:
                 return .other
             }

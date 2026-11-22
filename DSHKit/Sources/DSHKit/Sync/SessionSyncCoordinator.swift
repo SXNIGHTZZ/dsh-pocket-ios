@@ -167,6 +167,8 @@ public actor SessionSyncCoordinator {
     func handleFrame(_ data: Data) async throws {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         if let frame = DSHDecoding.streamFrame(fromJSON: json) {
+            // 只把正文增量发给上层；思考增量（`.reasoningDelta`）解码出来了但不消费——
+            // 气泡以落库的 assistant/message 里那段完整 reasoning 为准，不做逐字渲染。
             if case .textDelta(let attemptId, _, let text) = frame {
                 emit(.assistantDelta(attemptId: attemptId, text: text))
             }
@@ -241,7 +243,14 @@ public actor SessionSyncCoordinator {
 
     private func mergeMessage(_ message: DSHMessage) {
         if let index = messages.firstIndex(where: { $0.sequence == message.sequence }) {
-            messages[index] = message
+            // 思考按「新值空就留旧值」合并：重连快照 / session/page 兜底可能不带 reasoning 块，
+            // 整条替换会把已经显示出来的思考抹掉（表现为「重连后思考消失」）。
+            let kept = message.reasoning.isEmpty ? messages[index].reasoning : message.reasoning
+            messages[index] = kept == message.reasoning
+                ? message
+                : DSHMessage(id: message.id, sequence: message.sequence, kind: message.kind,
+                             text: message.text, isUser: message.isUser, rpcId: message.rpcId,
+                             images: message.images, reasoning: kept)
         } else {
             messages.append(message)
             messages.sort { $0.sequence < $1.sequence }

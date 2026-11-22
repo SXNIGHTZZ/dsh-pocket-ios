@@ -221,7 +221,14 @@ struct ConversationView: View {
                                 // 只有「最近 3 条消息」跑完整 Markdown，更早的降级成纯文本。
                                 // 用户明确说不关注更早的（2026-11-21）；实测滚动时每帧 20ms，
                                 // 富文本行数是主要成本，压到常数级就能回到 60fps。
-                                MessageRow(message: message, model: model, isCompact: isCompactMessage(entry))
+                                MessageRow(message: message, model: model,
+                                           isCompact: isCompactMessage(entry),
+                                           onToggleReasoning: {
+                                               // 展开/收起思考会改行高；贴着底部时先抑制补滚，
+                                               // 否则用户一点开就被拽到列表底部（与过程行同一套处理）。
+                                               scrollGeneration &+= 1
+                                               suppressAutoScrollUntil = Date().addingTimeInterval(0.5)
+                                           })
                                     .id(entry.id).padding(.top, topGap)
                             } else if let failure = entry.failure {
                                 TurnFailureRow(failure: failure).id(entry.id).padding(.top, topGap)

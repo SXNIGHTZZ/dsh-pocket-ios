@@ -195,7 +195,17 @@ extension ConnectionModel {
     func mergeMessages(_ incoming: [PocketMessage]) {
         loadOutboxIfNeeded()
         var bySequence = Dictionary(messages.filter { !$0.isPending }.map { ($0.sequence, $0) }, uniquingKeysWith: { first, _ in first })
-        for message in incoming where !message.isPending { bySequence[message.sequence] = message }
+        for message in incoming where !message.isPending {
+            // 思考「新值空就留旧值」：HTTP 兜底（session/page）和 WS 快照是两条解析路径，
+            // 其中一条没带 reasoning 块时，整条替换会把已显示的思考抹掉。
+            if let old = bySequence[message.sequence], message.reasoning.isEmpty, !old.reasoning.isEmpty {
+                var kept = message
+                kept.reasoning = old.reasoning
+                bySequence[message.sequence] = kept
+            } else {
+                bySequence[message.sequence] = message
+            }
+        }
         let incomingUserMessages = incoming.filter(\.isUser)
         let incomingRpcIds = Set(incoming.compactMap(\.rpcId).map { $0.lowercased() })
         confirmOutbox(rpcIds: incomingRpcIds)
