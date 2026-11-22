@@ -16,8 +16,9 @@ final class ReasoningFoldTests: XCTestCase {
         ]
         let result = ReasoningFold.fold(messages, turnStartSeqs: [2])
         XCTAssertEqual(result["a1"], "先看目录。\n\n再改文件。\n\n跑测试。")
-        XCTAssertEqual(result["a2"], "")
-        XCTAssertEqual(result["a3"], "")
+        // 同轮后续消息不再单独显示思考：字典里干脆没有它们（视图侧 `?? ""` 会隐藏）
+        XCTAssertNil(result["a2"], "同轮第二条不该再有一份思考")
+        XCTAssertNil(result["a3"], "同轮第三条不该再有一份思考")
         XCTAssertNil(result["u1"], "用户消息不参与合并")
     }
 
